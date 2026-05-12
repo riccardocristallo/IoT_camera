@@ -6,47 +6,50 @@ from rtsp_receiver import RTSPReceiver
 from processor import Processor
 from display import Display
 
+
 RTSP_URL = "rtsp://prova1234:prova1234@192.168.1.33:554/stream2"
 # RTSP_URL = "rtsp://rtsp-server:8554/videoTelefoni"
 
-# Modifica qui l'intervallo del pop-up (in secondi)
 SUMMARY_INTERVAL = 30
 
-receiver = RTSPReceiver(RTSP_URL)
-processor = Processor("yolo11s.pt")
-display = Display("IoT Camera - Phone Detection")
+receiver  = RTSPReceiver(RTSP_URL)
+processor = Processor()
+# Passa il processor al Display così lo slider può aggiornare la soglia direttamente
+display   = Display("IoT Camera - Phone Detection", processor=processor)
 
 stats = {
-    "max_with_phone": 0,  
-    "max_persons": 0,
-    "lock": threading.Lock()
+    "max_with_phone": 0,
+    "max_persons":    0,
+    "lock":           threading.Lock()
 }
+
 
 def show_summary_popup(unique_users, max_persons, interval):
     root = tk.Tk()
     root.withdraw()
     messagebox.showinfo(
-        "📊 Riepilogo attività",
+        "Riepilogo attività",
         f"Ultimi {interval} secondi:\n\n"
-        f"📱 Persone che hanno usato il telefono: {unique_users}\n"
-        f"👥 Massimo persone in scena: {max_persons}"
+        f"Persone che hanno usato il telefono: {unique_users}\n"
+        f"Massimo persone in scena: {max_persons}"
     )
     root.destroy()
+
 
 def summary_thread_fn():
     while True:
         time.sleep(SUMMARY_INTERVAL)
         with stats["lock"]:
             unique_users = stats["max_with_phone"]
-            max_p = stats["max_persons"]
-            # Reset per il prossimo intervallo
+            max_p        = stats["max_persons"]
             stats["max_with_phone"] = 0
-            stats["max_persons"] = 0
+            stats["max_persons"]    = 0
         threading.Thread(
             target=show_summary_popup,
             args=(unique_users, max_p, SUMMARY_INTERVAL),
             daemon=True
         ).start()
+
 
 receiver.start()
 processor.start(receiver.get_frame)

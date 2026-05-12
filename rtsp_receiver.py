@@ -2,10 +2,11 @@ import cv2
 import threading
 from collections import deque
 
+
 class RTSPReceiver:
     def __init__(self, url):
-        self.url = url
-        self.buffer = deque(maxlen=2)  
+        self.url     = url
+        self.buffer  = deque(maxlen=2)
         self.running = False
         self._thread = None
 
@@ -29,7 +30,6 @@ class RTSPReceiver:
         print(f"[RTSPReceiver] Connesso a {self.url}")
 
     def get_frame(self):
-        """Restituisce l'ultimo frame disponibile, o None se non ancora arrivato."""
         return self.buffer[-1] if self.buffer else None
 
     def stop(self):
