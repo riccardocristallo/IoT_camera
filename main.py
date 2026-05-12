@@ -7,7 +7,7 @@ from processor import Processor
 from display import Display
 
 RTSP_URL = "rtsp://prova1234:prova1234@192.168.1.33:554/stream2"
-# RTSP_URL = "rtsp://rtsp-server:8554/videoTelefoni"
+#RTSP_URL = "rtsp://localhost:8554/videoTelefoni"
 
 # Modifica qui l'intervallo del pop-up (in secondi)
 SUMMARY_INTERVAL = 30

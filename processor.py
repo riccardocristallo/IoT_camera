@@ -1,6 +1,7 @@
 from ultralytics import YOLO
 import cv2
 import threading
+import time
 
 
 class Processor:
@@ -13,13 +14,19 @@ class Processor:
 
     def start(self, get_frame_fn):
         def _infer():
+            TARGET_FPS = 10
+            frame_interval = 1.0 / TARGET_FPS
             while self._running:
+                t0 = time.time()
                 frame = get_frame_fn()
                 if frame is None:
+                    time.sleep(0.01)
                     continue
                 result = self._run(frame)
                 with self._lock:
                     self._last_result = result
+                elapsed = time.time() - t0
+                time.sleep(max(0, frame_interval - elapsed))
 
         self._thread = threading.Thread(target=_infer, daemon=True)
         self._thread.start()
@@ -43,46 +50,31 @@ class Processor:
         return (intersection / area_phone) >= threshold
 
     def _run(self, frame):
-        h_frame, w_frame = frame.shape[:2]
+        h_orig, w_orig = frame.shape[:2]
+        # Ridimensiona prima dell'inferenza
+        small = cv2.resize(frame, (640, 360))
 
-        # --- PASSATA 1: trova le persone sul frame intero ---
-        res_persons = self.model(frame, verbose=False, classes=[0])
-        persons = [
-            (box.xyxy[0].tolist(), float(box.conf[0]))
-            for box in res_persons[0].boxes
-        ]
+        # DOPO (abbassa la soglia di confidenza per il telefono)
+        results = self.model(small, verbose=False, classes=[0, 67], imgsz=320, conf=0.15)
 
-        # --- PASSATA 2: per ogni persona, croppa e cerca il telefono ---
-        phones_global = [] 
-        PAD = 40            
+        scale_x = w_orig / 640
+        scale_y = h_orig / 360
 
-        for (box, _) in persons:
-            x1, y1, x2, y2 = int(box[0]), int(box[1]), int(box[2]), int(box[3])
+        persons = []
+        phones_global = []
 
-            # Espandi il crop con padding, senza uscire dal frame
-            cx1 = max(0, x1 - PAD)
-            cy1 = max(0, y1 - PAD)
-            cx2 = min(w_frame, x2 + PAD)
-            cy2 = min(h_frame, y2 + PAD)
+        for box in results[0].boxes:
+            cls = int(box.cls[0])
+            x1, y1, x2, y2 = box.xyxy[0].tolist()
+            # Scala le coordinate al frame originale
+            coords = [x1 * scale_x, y1 * scale_y, x2 * scale_x, y2 * scale_y]
+            conf = float(box.conf[0])
+            if cls == 0:
+                persons.append((coords, conf))
+            elif cls == 67:
+                phones_global.append(coords)
 
-            crop = frame[cy1:cy2, cx1:cx2]
-            if crop.size == 0:
-                continue
-
-            # Cerca il telefono nel crop (oggetto ora più grande → più visibile)
-            res_phone = self.model(crop, verbose=False, classes=[67])
-
-            for pb in res_phone[0].boxes:
-                px1, py1, px2, py2 = pb.xyxy[0].tolist()
-                # Riconverti le coordinate dal crop al frame originale
-                phones_global.append([
-                    px1 + cx1,
-                    py1 + cy1,
-                    px2 + cx1,
-                    py2 + cy1
-                ])
-
-        # --- Associa ogni persona al telefono vicino ---
+        # Associa ogni persona al telefono vicino
         persons_with_phone = []
         for (person_box, conf) in persons:
             has_phone = any(
@@ -90,7 +82,7 @@ class Processor:
             )
             persons_with_phone.append((person_box, conf, has_phone))
 
-        # --- Disegna i risultati ---
+        # Disegna i risultati sul frame originale
         annotated = frame.copy()
 
         # Telefoni in blu
