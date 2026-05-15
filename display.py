@@ -30,7 +30,11 @@ class Display:
 
     def show(self, frame, num_persons: int, num_with_phone: int):
         # Leggi il valore corrente dello slider per mostrarlo nel frame
-        conf_val = cv2.getTrackbarPos(TRACKBAR_NAME, self.window_name)
+        try:
+            conf_val = cv2.getTrackbarPos(TRACKBAR_NAME, self.window_name)
+        except cv2.error:
+            conf_val = 25  # valore di default se la finestra non esiste ancora
+        #conf_val = cv2.getTrackbarPos(TRACKBAR_NAME, self.window_name)
         conf_pct = max(conf_val, 1)
 
         cv2.putText(frame,
