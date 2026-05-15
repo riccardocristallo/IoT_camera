@@ -20,12 +20,11 @@ class AttentionProcessor:
     KP_LEFT_EYE = 1
     KP_RIGHT_EYE = 2
 
-    MODE_DOWN_DISTRACTED = "down_distracted"   # lezione
-    MODE_UP_DISTRACTED = "up_distracted"       # esercitazione
+    MODE_DOWN_DISTRACTED = "down_distracted"
+    MODE_UP_DISTRACTED = "up_distracted"
 
     def __init__(self):
         self._yolo = YOLO("yolov8n-pose.pt")
-
         self.model_path = "face_landmarker.task"
         if not os.path.exists(self.model_path):
             print("[AttentionProcessor] Download modello face_landmarker...")
@@ -35,32 +34,39 @@ class AttentionProcessor:
             )
 
         self._face_3d = np.array([
-            [0.0,    0.0,    0.0],
-            [0.0,   -330.0, -65.0],
+            [0.0, 0.0, 0.0],
+            [0.0, -330.0, -65.0],
             [-225.0, 170.0, -135.0],
-            [225.0,  170.0, -135.0],
+            [225.0, 170.0, -135.0],
             [-150.0, -150.0, -125.0],
             [150.0, -150.0, -125.0],
         ], dtype=np.float64)
 
         self._landmark_ids = [1, 152, 263, 33, 287, 57]
-
         self._last_result = None
         self._lock = threading.Lock()
         self._running = True
         self._get_frame_fn = None
-
         self._session_checks = 0
         self._session_attentive = 0
         self.session_log = []
-
         self._mode = self.MODE_DOWN_DISTRACTED
         self._last_process_time = 0.0
         self._min_process_interval = 0.12
         self._last_annotated = None
         self._frame_count = 0
-
         print("[AttentionProcessor] Pronto (YOLO + Face Landmarker).")
+
+    def get_mode(self):
+        return self._mode
+
+    def set_mode(self, mode):
+        if mode in (self.MODE_DOWN_DISTRACTED, self.MODE_UP_DISTRACTED):
+            self._mode = mode
+            if self._mode == self.MODE_DOWN_DISTRACTED:
+                print("[AttentionProcessor] Modalita': LEZIONE (giu' = distratto)")
+            else:
+                print("[AttentionProcessor] Modalita': ESERCITAZIONE (su = distratto)")
 
     def _create_landmarker(self):
         base_options = mp_python.BaseOptions(model_asset_path=self.model_path)
@@ -77,6 +83,7 @@ class AttentionProcessor:
         return mp_vision.FaceLandmarker.create_from_options(options)
 
     def start(self, get_frame_fn):
+        self._running = True
         self._get_frame_fn = get_frame_fn
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
@@ -106,15 +113,12 @@ class AttentionProcessor:
 
     def toggle_mode(self):
         if self._mode == self.MODE_DOWN_DISTRACTED:
-            self._mode = self.MODE_UP_DISTRACTED
-            print("[AttentionProcessor] Modalita': ESERCITAZIONE (su = distratto)")
+            self.set_mode(self.MODE_UP_DISTRACTED)
         else:
-            self._mode = self.MODE_DOWN_DISTRACTED
-            print("[AttentionProcessor] Modalita': LEZIONE (giu' = distratto)")
+            self.set_mode(self.MODE_DOWN_DISTRACTED)
 
     def handle_click(self, x, y):
-        if 300 <= x <= 620 and 5 <= y <= 35:
-            self.toggle_mode()
+        return None
 
     def _loop(self):
         landmarker = self._create_landmarker()
@@ -179,18 +183,13 @@ class AttentionProcessor:
             return annotated
 
         kp_data = keypoints.data.cpu().numpy()
-        track_ids = (
-            boxes.id.int().cpu().tolist()
-            if boxes.id is not None
-            else list(range(len(boxes)))
-        )
+        track_ids = boxes.id.int().cpu().tolist() if boxes.id is not None else list(range(len(boxes)))
 
         num_faces = 0
         num_attentive = 0
 
         for idx, (track_id, kps) in enumerate(zip(track_ids, kp_data)):
             x1p, y1p, x2p, y2p = map(int, boxes.xyxy[idx].cpu().tolist())
-
             face_crop, roi_x, roi_y, roi_w, roi_h = self._get_face_crop(
                 frame, kps, x1p, y1p, x2p, y2p, img_w, img_h
             )
@@ -199,7 +198,6 @@ class AttentionProcessor:
                 continue
 
             num_faces += 1
-
             rgb = np.ascontiguousarray(cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB))
             mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
             lm_result = landmarker.detect(mp_img)
@@ -209,7 +207,7 @@ class AttentionProcessor:
                 cv2.rectangle(annotated, (roi_x, roi_y), (roi_x + roi_w, roi_y + roi_h), (128, 128, 128), 1)
                 cv2.putText(annotated, f"#{track_id} no-landmarks",
                             (x1p, max(0, y1p - 8)),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.45, (128, 128, 128), 1)
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.40, (128, 128, 128), 1)
                 continue
 
             pitch = self._estimate_pitch(
@@ -233,7 +231,7 @@ class AttentionProcessor:
             cv2.rectangle(annotated, (x1p, y1p), (x2p, y2p), color, 2)
             cv2.rectangle(annotated, (roi_x, roi_y), (roi_x + roi_w, roi_y + roi_h), color, 1)
             cv2.putText(annotated, status, (x1p, max(0, y1p - 8)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.52, color, 2)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.42, color, 1)
 
         if num_faces > 0:
             pct = num_attentive / num_faces * 100
@@ -253,8 +251,8 @@ class AttentionProcessor:
 
     def _get_mode_label(self):
         if self._mode == self.MODE_DOWN_DISTRACTED:
-            return "LEZIONE: distratto solo se guarda in basso"
-        return "ESERCITAZIONE: distratto solo se guarda in alto"
+            return "LEZIONE: distratto se guarda in basso"
+        return "ESERCITAZIONE: distratto se guarda in alto"
 
     def _get_face_crop(self, frame, kps, x1p, y1p, x2p, y2p, img_w, img_h):
         nose_conf = float(kps[self.KP_NOSE, 2])
@@ -278,7 +276,6 @@ class AttentionProcessor:
         ry1 = max(0, cy - base)
         rx2 = min(img_w, cx + base)
         ry2 = min(img_h, cy + base)
-
         roi_w = rx2 - rx1
         roi_h = ry2 - ry1
 
@@ -319,33 +316,17 @@ class AttentionProcessor:
 
     def _draw_hud(self, annotated, num_faces, num_attentive, pct, img_w, img_h, frame_count):
         overlay = annotated.copy()
-        cv2.rectangle(overlay, (0, 0), (700, 140), (20, 20, 20), -1)
+        cv2.rectangle(overlay, (0, 0), (620, 110), (20, 20, 20), -1)
         cv2.addWeighted(overlay, 0.55, annotated, 0.45, 0, annotated)
 
-        cv2.putText(annotated, "MODALITA': ATTENZIONE", (10, 28),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 220, 255), 2)
-
-        mode_text = self._get_mode_label()
-        cv2.putText(annotated, mode_text, (10, 55),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.58, (255, 220, 120), 2)
-
-        cv2.rectangle(annotated, (300, 5), (620, 35), (80, 80, 80), 1)
-        cv2.putText(annotated, "CLICK o tasto M per cambiare criterio", (308, 25),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.48, (220, 220, 220), 1)
-
-        cv2.putText(annotated, f"Volti rilevati : {num_faces}", (10, 82),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.60, (255, 255, 255), 2)
-        cv2.putText(annotated, f"Attenti ora    : {num_attentive}/{num_faces} ({pct:.0f}%)", (10, 108),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.60, (0, 255, 120), 2)
+        cv2.putText(annotated, "MODALITA': ATTENZIONE", (10, 22),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.58, (0, 220, 255), 2)
+        cv2.putText(annotated, self._get_mode_label(), (10, 44),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.46, (255, 220, 120), 1)
+        cv2.putText(annotated, f"Attenti ora: {num_attentive}/{num_faces} ({pct:.0f}%)", (10, 68),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.48, (0, 255, 120), 1)
 
         summary = self.get_session_summary()
         cv2.putText(annotated,
-                    f"Media sessione : {summary['avg_attention']:.1f}% | campioni: {summary['checks']}",
-                    (10, 132), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (180, 180, 180), 1)
-
-        cv2.putText(annotated, f"frame#{frame_count}",
-                    (img_w - 130, img_h - 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (100, 100, 100), 1)
-        cv2.putText(annotated, "SPAZIO = torna a Phone Detection",
-                    (img_w - 370, img_h - 12),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (150, 150, 150), 1)
+                    f"Media sessione: {summary['avg_attention']:.1f}% | campioni: {summary['checks']}",
+                    (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.40, (180, 180, 180), 1)
