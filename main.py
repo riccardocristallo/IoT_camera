@@ -10,7 +10,8 @@ from phone_detection.display import Display
 from attention_detection.attention_processor import AttentionProcessor
 from utils.control_panel import ControlPanel
 
-RTSP_URL = "rtsp://localhost:8554/video"
+RTSP_URL = "rtsp://prova1234:prova1234@192.168.1.34:554/stream2"
+#RTSP_URL = "rtsp://localhost:8554/video"
 SUMMARY_INTERVAL = 3000
 WINDOW_NAME = "IoT Camera - Phone Detection"
 
@@ -64,10 +65,15 @@ def sync_panel_from_runtime():
         panel.set_attention_mode(AttentionProcessor.MODE_DOWN_DISTRACTED)
     else:
         panel.set_attention_mode(attention.get_mode())
+    panel.update_attention_section_visibility(mode)
 
 
 def apply_phone_conf(conf_pct):
-    display.set_conf_value(max(1, min(conf_pct, 95)))
+    """Applica la soglia confidence sia al phone detector sia all'attention processor."""
+    val = max(1, min(conf_pct, 95))
+    display.set_conf_value(val)
+    if attention is not None:
+        attention.set_conf_threshold(val / 100.0)
 
 
 def apply_attention_mode(selected_mode):
@@ -85,9 +91,12 @@ def switch_to_attention():
     time.sleep(0.2)
 
     attention = AttentionProcessor()
+    # Passa la conf corrente del pannello anche all'attention processor
+    conf_val = panel.get_phone_conf() / 100.0 if panel is not None else 0.45
+    attention.set_conf_threshold(conf_val)
     attention.start(receiver.get_frame)
     attention.reset_session()
-    attention.set_mode(panel.get_attention_mode())
+    attention.set_mode(panel.get_attention_mode() if panel else AttentionProcessor.MODE_DOWN_DISTRACTED)
 
     mode = "attention"
     sync_panel_from_runtime()
@@ -130,6 +139,31 @@ def on_mode_change(selected):
         switch_to_phone()
 
 
+def toggle_mode():
+    """Alterna tra phone e attention (barra spaziatrice)."""
+    if mode == "phone":
+        switch_to_attention()
+    else:
+        switch_to_phone()
+
+
+def toggle_attention_submode():
+    """Alterna lezione/esercitazione (tasto M, solo in modalità attention)."""
+    if mode != "attention" or attention is None:
+        return
+    attention.toggle_mode()
+    new_mode = attention.get_mode()
+    if panel is not None:
+        panel.set_attention_mode(new_mode)
+    print(f"[Main] Submodalità attenzione → {new_mode}")
+
+
+def open_panel():
+    """Riporta in primo piano il pannello di controllo (tasto P)."""
+    if panel is not None:
+        panel.show()
+
+
 def summary_thread_fn():
     while running:
         time.sleep(SUMMARY_INTERVAL)
@@ -160,7 +194,7 @@ sync_panel_from_runtime()
 threading.Thread(target=summary_thread_fn, daemon=True).start()
 
 cv2.namedWindow(WINDOW_NAME)
-print("[Main] In attesa del primo frame... | Q = esci")
+print("[Main] In attesa del primo frame... | Q = esci | SPAZIO = cambia modalità | M = lezione/esercitazione | P = apri pannello")
 
 try:
     while running:
@@ -192,6 +226,13 @@ try:
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):
             break
+        elif key == ord(' '):          # Barra spaziatrice → cambia modalità
+            toggle_mode()
+        elif key == ord('m') or key == ord('M'):  # M → lezione/esercitazione
+            toggle_attention_submode()
+        elif key == ord('p') or key == ord('P'):  # P → riapri pannello
+            open_panel()
+
 finally:
     running = False
     receiver.stop()

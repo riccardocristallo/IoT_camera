@@ -10,6 +10,9 @@ import os
 from ultralytics import YOLO
 
 
+YOLO_MODEL_PATH = "yolov8n-pose.pt"
+YOLO_MODEL_URL  = "https://github.com/ultralytics/assets/releases/download/v8.4.0/yolov8n-pose.pt"
+
 class AttentionProcessor:
     DOWN_THRESHOLD = -18.0
     UP_THRESHOLD = 12.0
@@ -24,7 +27,17 @@ class AttentionProcessor:
     MODE_UP_DISTRACTED = "up_distracted"
 
     def __init__(self):
+        if not os.path.exists(YOLO_MODEL_PATH):
+            print(f"[AttentionProcessor] Download modello YOLO da:\n  {YOLO_MODEL_URL}")
+            urllib.request.urlretrieve(YOLO_MODEL_URL, YOLO_MODEL_PATH)
+            print(f"[AttentionProcessor] Modello salvato in: {YOLO_MODEL_PATH}")
+        else:
+            print(f"[AttentionProcessor] Modello YOLO già presente: {YOLO_MODEL_PATH}")
+
         self._yolo = YOLO("yolov8n-pose.pt")
+        # Soglia confidence YOLO (condivisa col pannello)
+        self._yolo_conf = 0.45
+
         self.model_path = "face_landmarker.task"
         if not os.path.exists(self.model_path):
             print("[AttentionProcessor] Download modello face_landmarker...")
@@ -57,6 +70,15 @@ class AttentionProcessor:
         self._frame_count = 0
         print("[AttentionProcessor] Pronto (YOLO + Face Landmarker).")
 
+    # ── Conf threshold (dal pannello) ────────────────────────────────────────
+    def set_conf_threshold(self, value: float):
+        """Imposta la soglia confidence per YOLO (0.01 – 0.95)."""
+        self._yolo_conf = max(0.01, min(value, 0.95))
+
+    def get_conf_threshold(self) -> float:
+        return self._yolo_conf
+
+    # ── Mode ─────────────────────────────────────────────────────────────────
     def get_mode(self):
         return self._mode
 
@@ -68,6 +90,13 @@ class AttentionProcessor:
             else:
                 print("[AttentionProcessor] Modalita': ESERCITAZIONE (su = distratto)")
 
+    def toggle_mode(self):
+        if self._mode == self.MODE_DOWN_DISTRACTED:
+            self.set_mode(self.MODE_UP_DISTRACTED)
+        else:
+            self.set_mode(self.MODE_DOWN_DISTRACTED)
+
+    # ── Lifecycle ─────────────────────────────────────────────────────────────
     def _create_landmarker(self):
         base_options = mp_python.BaseOptions(model_asset_path=self.model_path)
         options = mp_vision.FaceLandmarkerOptions(
@@ -111,15 +140,10 @@ class AttentionProcessor:
             "log": self.session_log.copy()
         }
 
-    def toggle_mode(self):
-        if self._mode == self.MODE_DOWN_DISTRACTED:
-            self.set_mode(self.MODE_UP_DISTRACTED)
-        else:
-            self.set_mode(self.MODE_DOWN_DISTRACTED)
-
     def handle_click(self, x, y):
         return None
 
+    # ── Internal loop ─────────────────────────────────────────────────────────
     def _loop(self):
         landmarker = self._create_landmarker()
 
@@ -164,7 +188,7 @@ class AttentionProcessor:
             frame,
             persist=True,
             classes=[0],
-            conf=0.45,
+            conf=self._yolo_conf,   # ← usa la soglia dal pannello
             iou=0.5,
             imgsz=320,
             verbose=False
@@ -246,8 +270,8 @@ class AttentionProcessor:
 
     def _is_distracted(self, pitch):
         if self._mode == self.MODE_DOWN_DISTRACTED:
-            return pitch < self.DOWN_THRESHOLD
-        return pitch > self.UP_THRESHOLD
+            return pitch > self.DOWN_THRESHOLD
+        return pitch < self.UP_THRESHOLD
 
     def _get_mode_label(self):
         if self._mode == self.MODE_DOWN_DISTRACTED:
@@ -330,3 +354,6 @@ class AttentionProcessor:
         cv2.putText(annotated,
                     f"Media sessione: {summary['avg_attention']:.1f}% | campioni: {summary['checks']}",
                     (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.40, (180, 180, 180), 1)
+        cv2.putText(annotated,
+                    f"Conf YOLO: {self._yolo_conf:.0%} | [M]=modo [SPAZIO]=phone/attenzione",
+                    (10, img_h - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (200, 200, 200), 1)
