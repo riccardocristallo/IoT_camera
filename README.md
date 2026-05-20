@@ -153,7 +153,7 @@ The `.env` file in the project root is automatically read by `config.py` through
 | `PHONE_CONF_THRESHOLD` | `0.35` | Initial phone detector confidence threshold (0.01–0.95) |
 | `YOLO_MODEL_PATH` | `yolov8n-pose.pt` | Local path of the YOLOv8 model |
 | `YOLO_MODEL_URL` | *(GitHub URL)* | Download URL for the YOLOv8 model |
-| `YOLO_CONF_THRESHOLD` | `0.45` | Initial YOLO confidence threshold (0.01–0.95) |
+| `YOLO_CONF_THRESHOLD` | `0.35` | Initial YOLO confidence threshold (0.01–0.95) |
 | `FACE_LANDMARKER_PATH` | `face_landmarker.task` | Local path of the FaceLandmarker model |
 | `FACE_LANDMARKER_URL` | *(GCS URL)* | Download URL for the FaceLandmarker model |
 | `DOWN_THRESHOLD` | `-18.0` | Pitch angle in degrees below which the head is considered lowered |
