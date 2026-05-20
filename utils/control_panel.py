@@ -1,7 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
 
-
 class ControlPanel:
     _PANEL_W = 480
     _PANEL_H = 460
@@ -16,24 +15,24 @@ class ControlPanel:
 
         self._current_mode = "phone"
 
-        # --- finestra PRIMA di qualsiasi tk.Variable ---
+        # --- window BEFORE any tk.Variable ---
         self.root = tk.Tk()
-        self.root.title("Controlli IoT Camera")
+        self.root.title("IoT Camera Controls")
         self.root.geometry(f"{self._PANEL_W}x{self._PANEL_H}+60+60")
         self.root.resizable(False, True)
         self.root.minsize(self._PANEL_W, 280)
         self.root.attributes("-topmost", True)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
-        # --- variabili di stato (DOPO tk.Tk()) ---
-        self.menu_status_var    = tk.StringVar(master=self.root, value="Modalita' attuale: PHONE DETECTION")
-        self.mode_var           = tk.StringVar(master=self.root, value="phone")
-        self.phone_conf_var     = tk.IntVar(master=self.root, value=display.get_conf_value())
+        # --- state variables (AFTER tk.Tk()) ---
+        self.menu_status_var = tk.StringVar(master=self.root, value="Current mode: PHONE DETECTION")
+        self.mode_var = tk.StringVar(master=self.root, value="phone")
+        self.phone_conf_var = tk.IntVar(master=self.root, value=display.get_conf_value())
         self.attention_mode_var = tk.StringVar(master=self.root, value=attention_processor_cls.MODE_DOWN_DISTRACTED)
 
         self._build()
 
-    # ── Costruzione UI ────────────────────────────────────────────────────────
+    # ── UI construction ───────────────────────────────────────────────────────
     def _build(self):
         self._canvas = tk.Canvas(self.root, highlightthickness=0)
         scrollbar = ttk.Scrollbar(self.root, orient="vertical", command=self._canvas.yview)
@@ -49,8 +48,8 @@ class ControlPanel:
         self._canvas.bind("<Configure>", self._on_canvas_configure)
 
         self._canvas.bind_all("<MouseWheel>", self._on_mousewheel)
-        self._canvas.bind_all("<Button-4>",   self._on_mousewheel)
-        self._canvas.bind_all("<Button-5>",   self._on_mousewheel)
+        self._canvas.bind_all("<Button-4>", self._on_mousewheel)
+        self._canvas.bind_all("<Button-5>", self._on_mousewheel)
 
         self._populate()
 
@@ -68,59 +67,59 @@ class ControlPanel:
         else:
             self._canvas.yview_scroll(int(-event.delta / 120), "units")
 
-    # ── Popolamento widget ────────────────────────────────────────────────────
+    # ── Widget population ─────────────────────────────────────────────────────
     def _populate(self):
         f = self._inner
 
-        tk.Label(f, text="Pannello controlli", font=("Arial", 12, "bold")).pack(anchor="w")
+        tk.Label(f, text="Control Panel", font=("Arial", 12, "bold")).pack(anchor="w")
         tk.Label(f, textvariable=self.menu_status_var, font=("Arial", 10),
                  fg="#0055aa").pack(anchor="w", pady=(2, 10))
 
-        # Modalità elaborazione
-        fm = tk.LabelFrame(f, text="Modalita' elaborazione", padx=10, pady=8)
+        # Processing mode
+        fm = tk.LabelFrame(f, text="Processing mode", padx=10, pady=8)
         fm.pack(fill="x", pady=(0, 10))
         tk.Radiobutton(fm, text="Phone detection", variable=self.mode_var, value="phone",
                        command=self._on_mode_radio).pack(anchor="w")
-        tk.Radiobutton(fm, text="Attenzione", variable=self.mode_var, value="attention",
+        tk.Radiobutton(fm, text="Attention", variable=self.mode_var, value="attention",
                        command=self._on_mode_radio).pack(anchor="w")
 
         # Confidence
-        fc = tk.LabelFrame(f, text="Confidence detector", padx=10, pady=8)
+        fc = tk.LabelFrame(f, text="Detector confidence", padx=10, pady=8)
         fc.pack(fill="x", pady=(0, 10))
-        tk.Label(fc, text="Soglia confidence (%):", font=("Arial", 9)).pack(anchor="w")
+        tk.Label(fc, text="Confidence threshold (%):", font=("Arial", 9)).pack(anchor="w")
         tk.Scale(fc, from_=1, to=95, orient="horizontal",
                  variable=self.phone_conf_var, length=400,
                  command=lambda v: self.on_phone_conf_change(int(float(v)))).pack(anchor="w")
         tk.Label(fc,
-                 text="Applicata sia al phone detector sia al rilevamento persone in modalita' attenzione.",
+                 text="Applied to both the phone detector and person detection in attention mode.",
                  font=("Arial", 8), fg="#555555", wraplength=400, justify="left").pack(anchor="w", pady=(2, 0))
 
-        # Criterio attenzione — costruito ma NON packato subito
-        self._fa = tk.LabelFrame(f, text="Criterio attenzione  [tasto M]", padx=10, pady=8)
+        # Attention criterion — built but NOT packed immediately
+        self._fa = tk.LabelFrame(f, text="Attention criterion [key M]", padx=10, pady=8)
         tk.Radiobutton(self._fa,
-                       text="Spiegazione (lezione): distratto se guarda in basso",
+                       text="Lecture: distracted if looking down",
                        variable=self.attention_mode_var,
                        value=self.attention_processor_cls.MODE_DOWN_DISTRACTED,
                        command=lambda: self.on_attention_mode_change(self.attention_mode_var.get()),
                        wraplength=380, justify="left").pack(anchor="w", pady=2)
         tk.Radiobutton(self._fa,
-                       text="Esercitazione: distratto se guarda in alto",
+                       text="Exercise: distracted if looking up",
                        variable=self.attention_mode_var,
                        value=self.attention_processor_cls.MODE_UP_DISTRACTED,
                        command=lambda: self.on_attention_mode_change(self.attention_mode_var.get()),
                        wraplength=380, justify="left").pack(anchor="w", pady=2)
         tk.Label(self._fa,
-                 text="Il tasto M sulla finestra video alterna rapidamente tra le due modalita'.",
+                 text="The M key on the video window quickly toggles between the two modes.",
                  font=("Arial", 8), fg="#555555", wraplength=380, justify="left").pack(anchor="w", pady=(4, 0))
 
-        # Scorciatoie — sempre visibile, sempre in fondo
-        self._fk = tk.LabelFrame(f, text="Scorciatoie da tastiera  (finestra video attiva)", padx=10, pady=6)
+        # Keyboard shortcuts — always visible, always at the bottom
+        self._fk = tk.LabelFrame(f, text="Keyboard shortcuts (video window active)", padx=10, pady=6)
         self._fk.pack(fill="x", pady=(0, 6))
         shortcuts = [
-            ("SPAZIO", "Cambia modalita': phone <-> attenzione"),
-            ("M",      "Cambia criterio: spiegazione <-> esercitazione  (solo in attenzione)"),
-            ("P",      "Riapri / porta in primo piano questo pannello"),
-            ("Q",      "Esci dall'applicazione"),
+            ("SPACE", "Toggle mode: phone <-> attention"),
+            ("M",     "Toggle criterion: lecture <-> exercise (attention mode only)"),
+            ("P",     "Reopen / bring this panel to the front"),
+            ("Q",     "Quit the application"),
         ]
         for key, desc in shortcuts:
             row = tk.Frame(self._fk)
@@ -132,7 +131,7 @@ class ControlPanel:
 
         self.update_attention_section_visibility("phone")
 
-    # ── Visibilità sezione attenzione ─────────────────────────────────────────
+    # ── Attention section visibility ──────────────────────────────────────────
     def update_attention_section_visibility(self, mode: str):
         self._current_mode = mode
         if mode == "attention":
@@ -142,12 +141,12 @@ class ControlPanel:
         self._inner.update_idletasks()
         self._on_inner_configure()
 
-    # ── Gestione chiusura finestra ────────────────────────────────────────────
+    # ── Window close handling ─────────────────────────────────────────────────
     def _on_close(self):
         self.root.withdraw()
 
     def show(self):
-        """Riporta in primo piano il pannello (tasto P)."""
+        """Bring the panel to the foreground (key P)."""
         self.root.deiconify()
         self.root.lift()
         self.root.focus_force()
@@ -155,7 +154,7 @@ class ControlPanel:
     def _on_mode_radio(self):
         self.on_mode_change(self.mode_var.get())
 
-    # ── API pubblica ──────────────────────────────────────────────────────────
+    # ── Public API ────────────────────────────────────────────────────────────
     def update(self):
         self.root.update_idletasks()
         self.root.update()

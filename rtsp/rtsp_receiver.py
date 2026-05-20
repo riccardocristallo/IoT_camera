@@ -2,7 +2,6 @@ import cv2
 import threading
 from collections import deque
 
-
 class RTSPReceiver:
     def __init__(self, url):
         self.url = url
@@ -16,7 +15,7 @@ class RTSPReceiver:
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
         if not cap.isOpened():
-            raise RuntimeError(f"Impossibile connettersi a: {self.url}")
+            raise RuntimeError(f"Cannot connect to: {self.url}")
 
         def _capture():
             while self.running:
@@ -27,11 +26,12 @@ class RTSPReceiver:
 
         self._thread = threading.Thread(target=_capture, daemon=True)
         self._thread.start()
-        print(f"[RTSPReceiver] Connesso a {self.url}")
+        print(f"[RTSPReceiver] Connected to {self.url}")
 
     def get_frame(self):
         return self.buffer[-1] if self.buffer else None
 
     def stop(self):
         self.running = False
-        print("[RTSPReceiver] Fermato.")
+        print("[RTSPReceiver] Stopped.")
+        

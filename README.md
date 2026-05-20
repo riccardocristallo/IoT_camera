@@ -1,25 +1,25 @@
 # 🎥 IoT Behavioral Analysis System
 
-Sistema di analisi comportamentale in tempo reale per ambienti indoor (aule, laboratori, sale riunioni).  
-Acquisisce lo stream video da una telecamera IP via RTSP e rileva automaticamente:
-- **Utilizzo del telefono** da parte delle persone inquadrate
-- **Livello di attenzione** stimato tramite pose corporea e orientamento del volto
+Real-time behavioral analysis system for indoor environments such as classrooms, laboratories, and meeting rooms.  
+It captures the video stream from an IP camera via RTSP and automatically detects:
+- **Phone usage** by people in the frame
+- **Attention level** estimated through body pose and face orientation
 
 ***
 
-## 📐 Architettura
+## 📐 Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         Telecamera IP (RTSP)                            │
+│                         IP Camera (RTSP)                                │
 │                    TAPO C225 → rtsp://…/stream2                         │
 └──────────────────────────────┬──────────────────────────────────────────┘
-                               │ frame H.264 continuo
+                               │ continuous H.264 frames
                                ▼
                       ┌─────────────────┐
-                      │   RTSPReceiver  │  Thread dedicato, buffer circolare (2 frame)
+                      │   RTSPReceiver  │  Dedicated thread, circular buffer (2 frames)
                       └────────┬────────┘
-                               │ frame BGR (NumPy)
+                               │ 
                ┌───────────────┴───────────────┐
                │                               │
                ▼                               ▼
@@ -28,192 +28,192 @@ Acquisisce lo stream video da una telecamera IP via RTSP e rileva automaticament
   │  (Phone Detection)     │     │  (Attention Detection)       │
   │                        │     │                              │
   │  MediaPipe             │     │  YOLOv8n-pose                │
-  │  EfficientDet-Lite2    │     │  → keypoints corpo           │
+  │  EfficientDet-Lite2    │     │  → body keypoints            │
   │  → person + cell phone │     │                              │
   │  → overlap check       │     │  MediaPipe FaceLandmarker    │
-  │  → annotated frame     │     │  → pitch testa (solvePnP)    │
+  │  → annotated frame     │     │  → head pitch (solvePnP)     │
   └────────────┬───────────┘     └──────────────┬───────────────┘
                │                                │
                └──────────────┬─────────────────┘
-                              │ frame annotato
+                              │ annotated frame
                               ▼
                     ┌──────────────────┐
-                    │  Display / Main  │  OpenCV imshow + log sessione
+                    │  Display / Main  │  OpenCV imshow + session log
                     └────────┬─────────┘
                              │
                              ▼
                     ┌──────────────────┐
-                    │   ControlPanel   │  Tkinter – pannello parametri
+                    │   ControlPanel   │  Tkinter – parameter panel
                     └──────────────────┘
 ```
 
-### Componenti principali
+### Main components
 
-| File | Ruolo |
-|------|-------|
-| `main.py` | Entry point: orchestrazione dei thread, loop principale OpenCV |
-| `config.py` | Carica `.env` e centralizza tutti i parametri |
-| `rtsp/rtsp_receiver.py` | Ricezione stream RTSP in thread separato |
-| `phone_detection/processor.py` | Rilevamento persone e telefoni (MediaPipe EfficientDet-Lite2) |
-| `phone_detection/display.py` | Overlay OpenCV con statistiche phone detection |
-| `attention_detection/attention_processor.py` | Stima attenzione: pose YOLOv8 + pitch volto (FaceLandmarker) |
-| `attention_detection/attention_summary_popup.py` | Popup Tkinter con grafico e KPI sessione |
-| `utils/control_panel.py` | Pannello di controllo Tkinter |
+| File | Role |
+|------|------|
+| `main.py` | Entry point: thread orchestration and main OpenCV loop |
+| `config.py` | Loads `.env` and centralizes all parameters |
+| `rtsp/rtsp_receiver.py` | Receives the RTSP stream in a separate thread |
+| `phone_detection/processor.py` | Detects people and phones using MediaPipe EfficientDet-Lite2 |
+| `phone_detection/display.py` | OpenCV overlay with phone detection statistics |
+| `attention_detection/attention_processor.py` | Attention estimation: YOLOv8 pose + face pitch using FaceLandmarker |
+| `attention_detection/attention_summary_popup.py` | Tkinter popup with session chart and KPIs |
+| `utils/control_panel.py` | Tkinter control panel |
 
 ***
 
-## ⚙️ Modalità operative
+## ⚙️ Operating modes
 
-### 📱 Phone Detection (default)
-Utilizza **MediaPipe EfficientDet-Lite2** in modalità live stream.  
-Per ogni frame rileva `person` e `cell phone`, poi verifica la sovrapposizione dei bounding box per associare un telefono a una persona specifica.
+### 📱 Phone Detection default
+Uses **MediaPipe EfficientDet-Lite2** in live stream mode.  
+For each frame, it detects `person` and `cell phone`, then checks bounding box overlap to associate a phone with a specific person.
 
 ### 👁 Attention Detection
-Utilizza **YOLOv8n-pose** per individuare le persone e stimare i keypoint del corpo.  
-Dalla regione del viso estrae un crop e lo passa a **MediaPipe FaceLandmarker** per calcolare il _pitch_ della testa tramite `solvePnP`.  
-Il pitch viene confrontato con le soglie configurabili (`DOWN_THRESHOLD`, `UP_THRESHOLD`) per determinare se la persona è attenta o distratta.
+Uses **YOLOv8n-pose** to detect people and estimate body keypoints.  
+From the face region, it extracts a crop and passes it to **MediaPipe FaceLandmarker** to calculate the head _pitch_ using `solvePnP`.  
+The pitch is compared against configurable thresholds (`DOWN_THRESHOLD`, `UP_THRESHOLD`) to determine whether the person is attentive or distracted.
 
-Due sotto-modalità:
-- **Lezione** (`MODE_DOWN_DISTRACTED`): distratto se guarda in basso (testa abbassata → telefono/libro)
-- **Esercitazione** (`MODE_UP_DISTRACTED`): distratto se guarda in alto (non monitora lo schermo)
+Two sub-modes:
+- **Lecture** (`MODE_DOWN_DISTRACTED`): distracted if looking down (head lowered → phone/book)
+- **Practice session** (`MODE_UP_DISTRACTED`): distracted if looking up (not monitoring the screen)
 
 ***
 
-## 🚀 Avvio rapido
+## 🚀 Quick start
 
-### 1. Prerequisiti
+### 1. Requirements
 
 - Python **3.10 – 3.12**
-- Sistema operativo: Windows, macOS o Linux
-- Telecamera IP con stream RTSP accessibile sulla rete locale (es. TAPO C225)
+- Operating system: Windows, macOS, or Linux
+- IP camera with an RTSP stream accessible on the local network, for example TAPO C225
 
-### 2. Installazione
+### 2. Installation
 
 ```bash
-# Crea e attiva un ambiente virtuale
+# Create and activate a virtual environment
 python -m venv venv
 source venv/bin/activate        # Linux/macOS
-# oppure:
+# or:
 venv\Scripts\activate           # Windows
 
-# Installa le dipendenze
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-### 3. Configurazione `.env`
+### 3. `.env` configuration
 
 ```bash
 cp .env.example .env
 ```
 
-Apri `.env` con un editor di testo e modifica almeno:
+Open `.env` with a text editor and change at least:
 
 ```dotenv
-# URL della tua telecamera
-RTSP_URL=rtsp://UTENTE:PASSWORD@IP_CAMERA:554/stream2
+# Your camera URL
+RTSP_URL=rtsp://USER:PASSWORD@CAMERA_IP:554/stream2
 ```
 
-Tutti gli altri parametri hanno valori predefiniti funzionanti — modificali solo se necessario.
+All other parameters have working default values — change them only if necessary.
 
-### 4. Avvio
+### 4. Run
 
 ```bash
 python main.py
 ```
 
-Al primo avvio i modelli AI vengono scaricati automaticamente (≈ 10–30 MB totali) e salvati nella directory corrente.
+On the first run, the AI models are downloaded automatically, approximately 10–30 MB in total, and saved in the current directory.
 
 ***
 
-## 🎮 Controlli runtime
+## 🎮 Runtime controls
 
-| Tasto | Azione |
-|-------|--------|
-| `SPAZIO` | Alterna tra Phone Detection e Attention Detection |
-| `M` | Cambia criterio attenzione (lezione ↔ esercitazione) |
-| `P` | Riapri / porta in primo piano il pannello di controllo |
-| `Q` | Esci dall'applicazione |
+| Key | Action |
+|-----|--------|
+| `SPACE` | Toggle between Phone Detection and Attention Detection |
+| `M` | Change attention criterion: lecture ↔ practice session |
+| `P` | Reopen / bring the control panel to the foreground |
+| `Q` | Exit the application |
 
-Il **pannello di controllo** (finestra Tkinter) consente di regolare la soglia di confidence con uno slider e di cambiare modalità tramite radio button.
-
-***
-
-## 🗂 Gestione del file `.env`
-
-Il file `.env` nella root del progetto viene letto automaticamente da `config.py` tramite la libreria `python-dotenv`.
-
-### Parametri disponibili
-
-| Variabile | Default | Descrizione |
-|-----------|---------|-------------|
-| `RTSP_URL` | `rtsp://localhost:8554/video` | URL stream RTSP della telecamera |
-| `WINDOW_NAME` | `IoT Camera - Phone Detection` | Titolo della finestra OpenCV |
-| `PHONE_MODEL_PATH` | `efficientdet_lite2.tflite` | Percorso locale del modello EfficientDet |
-| `PHONE_MODEL_URL` | *(URL GCS)* | URL di download del modello EfficientDet |
-| `PHONE_CONF_THRESHOLD` | `0.35` | Soglia confidence iniziale phone detector (0.01–0.95) |
-| `YOLO_MODEL_PATH` | `yolov8n-pose.pt` | Percorso locale del modello YOLOv8 |
-| `YOLO_MODEL_URL` | *(URL GitHub)* | URL di download del modello YOLOv8 |
-| `YOLO_CONF_THRESHOLD` | `0.45` | Soglia confidence iniziale YOLO (0.01–0.95) |
-| `FACE_LANDMARKER_PATH` | `face_landmarker.task` | Percorso locale del modello FaceLandmarker |
-| `FACE_LANDMARKER_URL` | *(URL GCS)* | URL di download del modello FaceLandmarker |
-| `DOWN_THRESHOLD` | `-18.0` | Angolo pitch (°) sotto cui la testa è considerata abbassata |
-| `UP_THRESHOLD` | `12.0` | Angolo pitch (°) sopra cui la testa è considerata alzata |
-| `MIN_PROCESS_INTERVAL` | `0.12` | Intervallo minimo (secondi) tra due inferenze attenzione |
+The **control panel** Tkinter window allows you to adjust the confidence threshold with a slider and change the mode using radio buttons.
 
 ***
 
-## 📦 Dipendenze (`requirements.txt`)
+## 🗂 `.env` file management
 
-| Pacchetto | Versione minima | Utilizzo |
-|-----------|-----------------|---------|
-| `opencv-python` | 4.9.0 | Acquisizione video, rendering, solvePnP |
-| `mediapipe` | 0.10.14 | EfficientDet-Lite2 (phone) + FaceLandmarker (attention) |
-| `ultralytics` | 8.4.0 | YOLOv8n-pose (keypoint corporei) |
-| `numpy` | 1.26.0 | Elaborazione array, matrici camera |
-| `python-dotenv` | 1.0.0 | Lettura file `.env` |
+The `.env` file in the project root is automatically read by `config.py` through the `python-dotenv` library.
 
-`tkinter` è incluso nella libreria standard di Python (nessuna installazione separata necessaria su Windows/macOS; su Linux: `sudo apt install python3-tk`).
+### Available parameters
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RTSP_URL` | `rtsp://localhost:8554/video` | Camera RTSP stream URL |
+| `WINDOW_NAME` | `IoT Camera - Phone Detection` | OpenCV window title |
+| `PHONE_MODEL_PATH` | `efficientdet_lite2.tflite` | Local path of the EfficientDet model |
+| `PHONE_MODEL_URL` | *(GCS URL)* | Download URL for the EfficientDet model |
+| `PHONE_CONF_THRESHOLD` | `0.35` | Initial phone detector confidence threshold (0.01–0.95) |
+| `YOLO_MODEL_PATH` | `yolov8n-pose.pt` | Local path of the YOLOv8 model |
+| `YOLO_MODEL_URL` | *(GitHub URL)* | Download URL for the YOLOv8 model |
+| `YOLO_CONF_THRESHOLD` | `0.45` | Initial YOLO confidence threshold (0.01–0.95) |
+| `FACE_LANDMARKER_PATH` | `face_landmarker.task` | Local path of the FaceLandmarker model |
+| `FACE_LANDMARKER_URL` | *(GCS URL)* | Download URL for the FaceLandmarker model |
+| `DOWN_THRESHOLD` | `-18.0` | Pitch angle in degrees below which the head is considered lowered |
+| `UP_THRESHOLD` | `12.0` | Pitch angle in degrees above which the head is considered raised |
+| `MIN_PROCESS_INTERVAL` | `0.12` | Minimum interval in seconds between two attention inferences |
 
 ***
 
-## 🏗 Struttura del progetto
+## 📦 Dependencies (`requirements.txt`)
+
+| Package | Minimum version | Usage |
+|---------|-----------------|-------|
+| `opencv-python` | 4.9.0 | Video capture, rendering, solvePnP |
+| `mediapipe` | 0.10.14 | EfficientDet-Lite2 for phone detection + FaceLandmarker for attention |
+| `ultralytics` | 8.4.0 | YOLOv8n-pose for body keypoints |
+| `numpy` | 1.26.0 | Array processing and camera matrices |
+| `python-dotenv` | 1.0.0 | Reading the `.env` file |
+
+`tkinter` is included in the Python standard library. No separate installation is required on Windows/macOS; on Linux: `sudo apt install python3-tk`.
+
+***
+
+## 🏗 Project structure
 
 ```
 iot-behavioral-analysis/
 ├── main.py                          # Entry point
-├── config.py                        # Caricamento .env e costanti
-├── .env                             # 🔒 Configurazione locale (non in git)
-├── .env.example                     # Template pubblico senza segreti
+├── config.py                        # .env loading and constants
+├── .env                             # 🔒 Local configuration (not committed to git)
+├── .env.example                     # Public template without secrets
 ├── .gitignore
 ├── requirements.txt
 │
 ├── rtsp/
-│   └── rtsp_receiver.py             # Ricezione stream RTSP
+│   └── rtsp_receiver.py             # RTSP stream receiver
 │
 ├── phone_detection/
-│   ├── processor.py                 # Rilevamento persone + telefoni
-│   └── display.py                   # Overlay OpenCV
+│   ├── processor.py                 # People + phone detection
+│   └── display.py                   # OpenCV overlay
 │
 ├── attention_detection/
-│   ├── attention_processor.py       # Stima attenzione (YOLO + FaceLandmarker)
-│   └── attention_summary_popup.py   # Popup riepilogo sessione
+│   ├── attention_processor.py       # Attention estimation (YOLO + FaceLandmarker)
+│   └── attention_summary_popup.py   # Session summary popup
 │
 └── utils/
-    └── control_panel.py             # Pannello di controllo Tkinter
+    └── control_panel.py             # Tkinter control panel
 ```
 
 ***
 
-## 🔧 Hardware di riferimento
+## 🔧 Reference hardware
 
-| Componente | Modello |
-|------------|---------|
-| Telecamera IP | TP-Link TAPO C225 |
+| Component | Model |
+|-----------|-------|
+| IP Camera | TP-Link TAPO C225 |
 | Router | ZyXEL WAP3205 V2 (N300) |
-| Computer | Qualsiasi PC in grado di eseguire inferenza real-time (consigliato: CPU quad-core, 8 GB RAM) |
+| Computer | Any PC capable of running real-time inference. Recommended: quad-core CPU, 8 GB RAM |
 
 ***
 
-## 📄 Licenza
+## 📄 License
 
-Progetto accademico — uso educativo.
+Academic project — educational use.

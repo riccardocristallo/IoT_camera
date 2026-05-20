@@ -11,13 +11,13 @@ from attention_detection.attention_processor import AttentionProcessor
 from utils.control_panel import ControlPanel
 from attention_detection.attention_summary_popup import show_attention_summary_popup
 
-receiver = RTSPReceiver(RTSP_URL)
+receiver  = RTSPReceiver(RTSP_URL)
 processor = Processor()
 attention = None
-mode = "phone"
-display = Display(WINDOW_NAME, processor=processor)
-panel = None
-running = True
+mode      = "phone"
+display   = Display(WINDOW_NAME, processor=processor)
+panel     = None
+running   = True
 
 _ui_queue = queue.SimpleQueue()
 
@@ -56,7 +56,7 @@ def switch_to_attention():
     global attention, mode
     if mode == "attention":
         return
-    print("[Main] Passaggio a modalità ATTENZIONE...")
+    print("[Main] Switching to ATTENTION mode...")
     processor.stop()
     time.sleep(0.2)
     attention = AttentionProcessor()
@@ -67,15 +67,15 @@ def switch_to_attention():
     attention.set_mode(panel.get_attention_mode() if panel else AttentionProcessor.MODE_DOWN_DISTRACTED)
     mode = "attention"
     sync_panel_from_runtime()
-    panel.set_status("Modalità attuale: ATTENZIONE")
-    print("[Main] Modalità ATTENZIONE attivata")
+    panel.set_status("Current mode: ATTENTION")
+    print("[Main] ATTENTION mode activated")
 
 
 def switch_to_phone():
     global processor, attention, mode
     if mode == "phone":
         return
-    print("[Main] Passaggio a modalità PHONE DETECTION...")
+    print("[Main] Switching to PHONE DETECTION mode...")
     summary = attention.get_session_summary() if attention is not None else {
         "avg_attention": 0.0, "checks": 0, "log": []
     }
@@ -90,8 +90,8 @@ def switch_to_phone():
     threading.Thread(target=show_attention_popup, args=(summary,), daemon=True).start()
     mode = "phone"
     sync_panel_from_runtime()
-    panel.set_status("Modalità attuale: PHONE DETECTION")
-    print("[Main] Modalità PHONE DETECTION attivata")
+    panel.set_status("Current mode: PHONE DETECTION")
+    print("[Main] PHONE DETECTION mode activated")
 
 
 def on_mode_change(selected):
@@ -102,7 +102,7 @@ def on_mode_change(selected):
 
 
 def toggle_mode():
-    """Alterna tra phone e attention (barra spaziatrice)."""
+    """Toggle between phone and attention modes (spacebar)."""
     if mode == "phone":
         switch_to_attention()
     else:
@@ -110,24 +110,22 @@ def toggle_mode():
 
 
 def toggle_attention_submode():
-    """Alterna lezione/esercitazione (tasto M, solo in modalità attention)."""
+    """Toggle lecture/exercise sub-mode (key M, only in attention mode)."""
     if mode != "attention" or attention is None:
         return
     attention.toggle_mode()
     new_mode = attention.get_mode()
     if panel is not None:
         panel.set_attention_mode(new_mode)
-    print(f"[Main] Submodalità attenzione → {new_mode}")
+    print(f"[Main] Attention sub-mode → {new_mode}")
 
 
 def open_panel():
-    """Riporta in primo piano il pannello di controllo (tasto P)."""
+    """Bring the control panel to the foreground (key P)."""
     if panel is not None:
         panel.show()
 
 
-receiver.start()
-processor.start(receiver.get_frame)
 panel = ControlPanel(
     display=display,
     attention_processor_cls=AttentionProcessor,
@@ -137,8 +135,11 @@ panel = ControlPanel(
 )
 sync_panel_from_runtime()
 
-cv2.namedWindow(WINDOW_NAME)
-print("[Main] In attesa del primo frame... | Q = esci | SPAZIO = cambia modalità | M = lezione/esercitazione | P = apri pannello")
+display.init_window()
+receiver.start()
+processor.start(receiver.get_frame)
+
+print("[Main] Waiting for first frame... | Q = quit | SPACE = toggle mode | M = lecture/exercise | P = open panel")
 
 try:
     while running:

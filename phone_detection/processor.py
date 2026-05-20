@@ -10,20 +10,18 @@ from mediapipe.tasks.python import vision as mp_vision
 from config import PHONE_MODEL_PATH, PHONE_MODEL_URL, PHONE_CONF_THRESHOLD
 
 MODEL_PATH = PHONE_MODEL_PATH
-MODEL_URL  = PHONE_MODEL_URL
+MODEL_URL = PHONE_MODEL_URL
 
 PERSON_LABEL = "person"
-PHONE_LABEL  = "cell phone"
-
+PHONE_LABEL = "cell phone"
 
 def _download_model_if_needed(path: str, url: str):
     if not os.path.exists(path):
-        print(f"[Processor] Download modello MediaPipe da:\n  {url}")
+        print(f"[Processor] Downloading MediaPipe model from:\n  {url}")
         urllib.request.urlretrieve(url, path)
-        print(f"[Processor] Modello salvato in: {path}")
+        print(f"[Processor] Model saved to: {path}")
     else:
-        print(f"[Processor] Modello già presente: {path}")
-
+        print(f"[Processor] Model already present: {path}")
 
 class Processor:
     def __init__(self, model_path: str = MODEL_PATH):
@@ -36,10 +34,10 @@ class Processor:
         self._raw_lock = threading.Lock()
         self.score_threshold = PHONE_CONF_THRESHOLD
 
-        BaseOptions  = mp.tasks.BaseOptions
+        BaseOptions = mp.tasks.BaseOptions
         ObjectDetector = mp_vision.ObjectDetector
-        ObjDetOptions  = mp_vision.ObjectDetectorOptions
-        RunningMode    = mp_vision.RunningMode
+        ObjDetOptions = mp_vision.ObjectDetectorOptions
+        RunningMode = mp_vision.RunningMode
 
         options = ObjDetOptions(
             base_options=BaseOptions(model_asset_path=model_path),
@@ -49,7 +47,7 @@ class Processor:
             result_callback=self._on_result,
         )
         self._detector = ObjectDetector.create_from_options(options)
-        print(f"[Processor] MediaPipe ObjectDetector caricato: {model_path}")
+        print(f"[Processor] MediaPipe ObjectDetector loaded: {model_path}")
 
     def _on_result(self, result, output_image, timestamp_ms: int):
         with self._raw_lock:
@@ -112,7 +110,7 @@ class Processor:
     def _process(self, frame, detections, threshold: float):
         h, w = frame.shape[:2]
         persons = []
-        phones  = []
+        phones = []
 
         for det in detections:
             if not det.categories:
@@ -121,8 +119,8 @@ class Processor:
             if cat.score < threshold:
                 continue
             label = cat.category_name.lower()
-            conf  = cat.score
-            box   = self._det_to_xyxy(det, w, h)
+            conf = cat.score
+            box = self._det_to_xyxy(det, w, h)
             if label == PERSON_LABEL:
                 persons.append((*box, conf))
             elif label == PHONE_LABEL:
@@ -138,21 +136,21 @@ class Processor:
         for (px1, py1, px2, py2) in phones:
             cv2.rectangle(annotated, (px1, py1), (px2, py2), (255, 150, 0), 2)
             cv2.putText(annotated, "phone", (px1, max(py1 - 5, 10)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 150, 0), 1)
+                cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 150, 0), 1)
 
         num_with_phone = 0
         for (x1, y1, x2, y2, conf, has_phone) in persons_with_phone:
             if has_phone:
-                color     = (0, 0, 255)
+                color = (0, 0, 255)
                 label_txt = f"PHONE! {conf:.0%}"
                 num_with_phone += 1
             else:
-                color     = (0, 255, 0)
+                color = (0, 255, 0)
                 label_txt = f"Person {conf:.0%}"
             cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
             (tw, th), _ = cv2.getTextSize(label_txt, cv2.FONT_HERSHEY_SIMPLEX, 0.52, 1)
             cv2.rectangle(annotated, (x1, y1 - th - 8), (x1 + tw + 6, y1), color, -1)
             cv2.putText(annotated, label_txt, (x1 + 3, y1 - 4),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.52, (255, 255, 255), 1)
+                cv2.FONT_HERSHEY_SIMPLEX, 0.52, (255, 255, 255), 1)
 
         return annotated, len(persons_with_phone), num_with_phone

@@ -1,7 +1,3 @@
-"""
-config.py — Carica il file .env e centralizza tutti i parametri di configurazione.
-Importare questo modulo al posto dei valori hardcoded nei singoli file.
-"""
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -19,30 +15,30 @@ def _get_float(key: str, default: float) -> float:
         return default
 
 # ── Stream ────────────────────────────────────────────────────────────────────
-RTSP_URL: str       = _get("RTSP_URL", "rtsp://localhost:8554/video")
-WINDOW_NAME: str    = _get("WINDOW_NAME", "IoT Camera - Phone Detection")
+RTSP_URL: str = _get("RTSP_URL", "rtsp://localhost:8554/video")
+WINDOW_NAME: str = _get("WINDOW_NAME", "IoT Camera - Phone Detection")
 
 # ── Phone Detection ───────────────────────────────────────────────────────────
-PHONE_MODEL_PATH: str  = _get("PHONE_MODEL_PATH", "efficientdet_lite2.tflite")
-PHONE_MODEL_URL: str   = _get("PHONE_MODEL_URL",
+PHONE_MODEL_PATH: str = _get("PHONE_MODEL_PATH", "efficientdet_lite2.tflite")
+PHONE_MODEL_URL: str = _get("PHONE_MODEL_URL",
     "https://storage.googleapis.com/mediapipe-models/object_detector/"
     "efficientdet_lite2/float32/1/efficientdet_lite2.tflite")
 PHONE_CONF_THRESHOLD: float = _get_float("PHONE_CONF_THRESHOLD", 0.35)
 
 # ── Attention Detection ───────────────────────────────────────────────────────
-YOLO_MODEL_PATH: str   = _get("YOLO_MODEL_PATH", "yolov8n-pose.pt")
-YOLO_MODEL_URL: str    = _get("YOLO_MODEL_URL",
+YOLO_MODEL_PATH: str = _get("YOLO_MODEL_PATH", "yolov8n-pose.pt")
+YOLO_MODEL_URL: str = _get("YOLO_MODEL_URL",
     "https://github.com/ultralytics/assets/releases/download/v8.4.0/yolov8n-pose.pt")
-YOLO_CONF_THRESHOLD: float  = _get_float("YOLO_CONF_THRESHOLD", 0.35)
+YOLO_CONF_THRESHOLD: float = _get_float("YOLO_CONF_THRESHOLD", 0.35)
 
-FACE_LANDMARKER_PATH: str  = _get("FACE_LANDMARKER_PATH", "face_landmarker.task")
-FACE_LANDMARKER_URL: str   = _get("FACE_LANDMARKER_URL",
+FACE_LANDMARKER_PATH: str = _get("FACE_LANDMARKER_PATH", "face_landmarker.task")
+FACE_LANDMARKER_URL: str = _get("FACE_LANDMARKER_URL",
     "https://storage.googleapis.com/mediapipe-models/face_landmarker/"
     "face_landmarker/float16/1/face_landmarker.task")
 
-# ── Soglie angolo testa ───────────────────────────────────────────────────────
-DOWN_THRESHOLD: float  = _get_float("DOWN_THRESHOLD", -18.0)
-UP_THRESHOLD: float    = _get_float("UP_THRESHOLD", 12.0)
+# ── Head angle thresholds ─────────────────────────────────────────────────────
+DOWN_THRESHOLD: float = _get_float("DOWN_THRESHOLD", -18.0)
+UP_THRESHOLD: float = _get_float("UP_THRESHOLD", 12.0)
 
 # ── Performance ───────────────────────────────────────────────────────────────
 MIN_PROCESS_INTERVAL: float = _get_float("MIN_PROCESS_INTERVAL", 0.12)
