@@ -4,7 +4,7 @@ from tkinter import ttk
 
 class ControlPanel:
     _PANEL_W = 480
-    _PANEL_H = 520
+    _PANEL_H = 460
 
     def __init__(self, display, attention_processor_cls, on_mode_change,
                  on_phone_conf_change, on_attention_mode_change):
@@ -21,17 +21,15 @@ class ControlPanel:
         self.root.title("Controlli IoT Camera")
         self.root.geometry(f"{self._PANEL_W}x{self._PANEL_H}+60+60")
         self.root.resizable(False, True)
-        self.root.minsize(self._PANEL_W, 300)
+        self.root.minsize(self._PANEL_W, 280)
         self.root.attributes("-topmost", True)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
         # --- variabili di stato (DOPO tk.Tk()) ---
-        self.menu_status_var     = tk.StringVar(master=self.root, value="Modalita' attuale: PHONE DETECTION")
-        self.mode_var            = tk.StringVar(master=self.root, value="phone")
-        self.phone_conf_var      = tk.IntVar(master=self.root, value=display.get_conf_value())
-        self.attention_mode_var  = tk.StringVar(master=self.root, value=attention_processor_cls.MODE_DOWN_DISTRACTED)
-        self.summary_enabled_var = tk.BooleanVar(master=self.root, value=True)
-        self._summary_enabled_cache = True
+        self.menu_status_var    = tk.StringVar(master=self.root, value="Modalita' attuale: PHONE DETECTION")
+        self.mode_var           = tk.StringVar(master=self.root, value="phone")
+        self.phone_conf_var     = tk.IntVar(master=self.root, value=display.get_conf_value())
+        self.attention_mode_var = tk.StringVar(master=self.root, value=attention_processor_cls.MODE_DOWN_DISTRACTED)
 
         self._build()
 
@@ -97,13 +95,6 @@ class ControlPanel:
                  text="Applicata sia al phone detector sia al rilevamento persone in modalita' attenzione.",
                  font=("Arial", 8), fg="#555555", wraplength=400, justify="left").pack(anchor="w", pady=(2, 0))
 
-        # Popup riepilogo phone
-        self._fp = tk.LabelFrame(f, text="Popup riepilogo phone", padx=10, pady=8)
-        self._fp.pack(fill="x", pady=(0, 10))
-        tk.Checkbutton(self._fp, text="Abilita popup riepilogo periodico",
-               variable=self.summary_enabled_var,
-               command=self._on_summary_toggle).pack(anchor="w")
-
         # Criterio attenzione — costruito ma NON packato subito
         self._fa = tk.LabelFrame(f, text="Criterio attenzione  [tasto M]", padx=10, pady=8)
         tk.Radiobutton(self._fa,
@@ -139,14 +130,12 @@ class ControlPanel:
             tk.Label(row, text=desc, font=("Arial", 9),
                      wraplength=340, justify="left").pack(side="left")
 
-        # Stato iniziale
         self.update_attention_section_visibility("phone")
 
     # ── Visibilità sezione attenzione ─────────────────────────────────────────
     def update_attention_section_visibility(self, mode: str):
         self._current_mode = mode
         if mode == "attention":
-            # Mostra il criterio attenzione SOPRA le shortcut
             self._fa.pack(fill="x", pady=(0, 10), before=self._fk)
         else:
             self._fa.pack_forget()
@@ -194,9 +183,3 @@ class ControlPanel:
 
     def get_attention_mode(self) -> str:
         return self.attention_mode_var.get()
-
-    def is_summary_enabled(self) -> bool:
-        return self._summary_enabled_cache
-    
-    def _on_summary_toggle(self):
-        self._summary_enabled_cache = bool(self.summary_enabled_var.get())

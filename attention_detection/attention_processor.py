@@ -188,7 +188,7 @@ class AttentionProcessor:
             frame,
             persist=True,
             classes=[0],
-            conf=self._yolo_conf,   # ← usa la soglia dal pannello
+            conf=self._yolo_conf,
             iou=0.5,
             imgsz=320,
             verbose=False

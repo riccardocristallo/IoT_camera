@@ -4,17 +4,18 @@ import tkinter as tk
 import cv2
 import queue
 
-from tkinter import messagebox
 from rtsp.rtsp_receiver import RTSPReceiver
 from phone_detection.processor import Processor
 from phone_detection.display import Display
 from attention_detection.attention_processor import AttentionProcessor
 from utils.control_panel import ControlPanel
+from attention_detection.attention_summary_popup import show_attention_summary_popup
+
 
 RTSP_URL = "rtsp://prova1234:prova1234@192.168.1.33:554/stream2"
 #RTSP_URL = "rtsp://localhost:8554/video"
-SUMMARY_INTERVAL = 10
 WINDOW_NAME = "IoT Camera - Phone Detection"
+
 
 receiver = RTSPReceiver(RTSP_URL)
 processor = Processor()
@@ -24,54 +25,13 @@ display = Display(WINDOW_NAME, processor=processor)
 panel = None
 running = True
 
-stats = {
-    "max_with_phone": 0,
-    "max_persons": 0,
-    "lock": threading.Lock()
-}
 
 _ui_queue = queue.SimpleQueue()
-
-def _show_nonblocking_popup(title: str, message: str):
-    """Crea un popup Toplevel non bloccante nel main thread."""
-    win = tk.Toplevel(panel.root)
-    win.title(title)
-    win.attributes("-topmost", True)
-    win.resizable(False, False)
-
-    tk.Label(win, text=message, font=("Arial", 10),
-             justify="left", padx=20, pady=12).pack()
-    tk.Button(win, text="OK", width=10,
-              command=win.destroy).pack(pady=(0, 12))
-
-    # Centra rispetto al pannello
-    win.update_idletasks()
-    px = panel.root.winfo_x() + (panel.root.winfo_width()  - win.winfo_width())  // 2
-    py = panel.root.winfo_y() + (panel.root.winfo_height() - win.winfo_height()) // 2
-    win.geometry(f"+{px}+{py}")
-
-
-def show_summary_popup(unique_users, max_persons, interval):
-    def _show():
-        _show_nonblocking_popup(
-            "Riepilogo attività",
-            f"Ultimi {interval} secondi:\n\n"
-            f"Persone che hanno usato il telefono: {unique_users}\n"
-            f"Massimo persone in scena: {max_persons}"
-        )
-    _ui_queue.put(_show)
 
 
 def show_attention_popup(summary):
     def _show():
-        log_lines = "\n".join([f"  {t}: {p}%" for t, p in summary["log"][-10:]]) or "  Nessun dato"
-        _show_nonblocking_popup(
-            "Riepilogo Attenzione",
-            f"Sessione attenzione terminata\n\n"
-            f"Media attenzione: {summary['avg_attention']:.1f}%\n"
-            f"Campioni rilevati: {summary['checks']}\n\n"
-            f"Ultimi rilevamenti:\n{log_lines}"
-        )
+        show_attention_summary_popup(panel.root, summary)
     _ui_queue.put(_show)
 
 
@@ -110,7 +70,6 @@ def switch_to_attention():
     time.sleep(0.2)
 
     attention = AttentionProcessor()
-    # Passa la conf corrente del pannello anche all'attention processor
     conf_val = panel.get_phone_conf() / 100.0 if panel is not None else 0.45
     attention.set_conf_threshold(conf_val)
     attention.start(receiver.get_frame)
@@ -183,19 +142,6 @@ def open_panel():
         panel.show()
 
 
-def summary_thread_fn():
-    while running:
-        time.sleep(SUMMARY_INTERVAL)
-        with stats["lock"]:
-            unique_users = stats["max_with_phone"]
-            max_p = stats["max_persons"]
-            stats["max_with_phone"] = 0
-            stats["max_persons"] = 0
-
-        if mode == "phone" and panel is not None and panel.is_summary_enabled():
-            show_summary_popup(unique_users, max_p, SUMMARY_INTERVAL)
-
-
 receiver.start()
 processor.start(receiver.get_frame)
 panel = ControlPanel(
@@ -206,7 +152,6 @@ panel = ControlPanel(
     on_attention_mode_change=apply_attention_mode,
 )
 sync_panel_from_runtime()
-threading.Thread(target=summary_thread_fn, daemon=True).start()
 
 cv2.namedWindow(WINDOW_NAME)
 print("[Main] In attesa del primo frame... | Q = esci | SPAZIO = cambia modalità | M = lezione/esercitazione | P = apri pannello")
@@ -227,13 +172,6 @@ try:
             annotated, num_persons, num_with_phone = processor.get_result()
             if annotated is None:
                 annotated = frame
-
-            with stats["lock"]:
-                if num_with_phone > stats["max_with_phone"]:
-                    stats["max_with_phone"] = num_with_phone
-                if num_persons > stats["max_persons"]:
-                    stats["max_persons"] = num_persons
-
             display.show(annotated, num_persons, num_with_phone)
         else:
             annotated = attention.get_result() if attention is not None else None
@@ -244,11 +182,11 @@ try:
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):
             break
-        elif key == ord(' '):          # Barra spaziatrice → cambia modalità
+        elif key == ord(' '):
             toggle_mode()
-        elif key == ord('m') or key == ord('M'):  # M → lezione/esercitazione
+        elif key == ord('m') or key == ord('M'):
             toggle_attention_submode()
-        elif key == ord('p') or key == ord('P'):  # P → riapri pannello
+        elif key == ord('p') or key == ord('P'):
             open_panel()
 
 finally:
