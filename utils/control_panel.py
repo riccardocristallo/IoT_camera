@@ -31,6 +31,7 @@ class ControlPanel:
         self.phone_conf_var      = tk.IntVar(master=self.root, value=display.get_conf_value())
         self.attention_mode_var  = tk.StringVar(master=self.root, value=attention_processor_cls.MODE_DOWN_DISTRACTED)
         self.summary_enabled_var = tk.BooleanVar(master=self.root, value=True)
+        self._summary_enabled_cache = True
 
         self._build()
 
@@ -100,7 +101,8 @@ class ControlPanel:
         self._fp = tk.LabelFrame(f, text="Popup riepilogo phone", padx=10, pady=8)
         self._fp.pack(fill="x", pady=(0, 10))
         tk.Checkbutton(self._fp, text="Abilita popup riepilogo periodico",
-                       variable=self.summary_enabled_var).pack(anchor="w")
+               variable=self.summary_enabled_var,
+               command=self._on_summary_toggle).pack(anchor="w")
 
         # Criterio attenzione — costruito ma NON packato subito
         self._fa = tk.LabelFrame(f, text="Criterio attenzione  [tasto M]", padx=10, pady=8)
@@ -194,4 +196,7 @@ class ControlPanel:
         return self.attention_mode_var.get()
 
     def is_summary_enabled(self) -> bool:
-        return bool(self.summary_enabled_var.get())
+        return self._summary_enabled_cache
+    
+    def _on_summary_toggle(self):
+        self._summary_enabled_cache = bool(self.summary_enabled_var.get())

@@ -1,18 +1,19 @@
 import time
 import threading
 import tkinter as tk
-from tkinter import messagebox
 import cv2
+import queue
 
+from tkinter import messagebox
 from rtsp.rtsp_receiver import RTSPReceiver
 from phone_detection.processor import Processor
 from phone_detection.display import Display
 from attention_detection.attention_processor import AttentionProcessor
 from utils.control_panel import ControlPanel
 
-RTSP_URL = "rtsp://prova1234:prova1234@192.168.1.34:554/stream2"
+RTSP_URL = "rtsp://prova1234:prova1234@192.168.1.33:554/stream2"
 #RTSP_URL = "rtsp://localhost:8554/video"
-SUMMARY_INTERVAL = 3000
+SUMMARY_INTERVAL = 10
 WINDOW_NAME = "IoT Camera - Phone Detection"
 
 receiver = RTSPReceiver(RTSP_URL)
@@ -29,31 +30,49 @@ stats = {
     "lock": threading.Lock()
 }
 
+_ui_queue = queue.SimpleQueue()
+
+def _show_nonblocking_popup(title: str, message: str):
+    """Crea un popup Toplevel non bloccante nel main thread."""
+    win = tk.Toplevel(panel.root)
+    win.title(title)
+    win.attributes("-topmost", True)
+    win.resizable(False, False)
+
+    tk.Label(win, text=message, font=("Arial", 10),
+             justify="left", padx=20, pady=12).pack()
+    tk.Button(win, text="OK", width=10,
+              command=win.destroy).pack(pady=(0, 12))
+
+    # Centra rispetto al pannello
+    win.update_idletasks()
+    px = panel.root.winfo_x() + (panel.root.winfo_width()  - win.winfo_width())  // 2
+    py = panel.root.winfo_y() + (panel.root.winfo_height() - win.winfo_height()) // 2
+    win.geometry(f"+{px}+{py}")
+
 
 def show_summary_popup(unique_users, max_persons, interval):
-    root = tk.Tk()
-    root.withdraw()
-    messagebox.showinfo(
-        "Riepilogo attività",
-        f"Ultimi {interval} secondi:\n\n"
-        f"Persone che hanno usato il telefono: {unique_users}\n"
-        f"Massimo persone in scena: {max_persons}"
-    )
-    root.destroy()
+    def _show():
+        _show_nonblocking_popup(
+            "Riepilogo attività",
+            f"Ultimi {interval} secondi:\n\n"
+            f"Persone che hanno usato il telefono: {unique_users}\n"
+            f"Massimo persone in scena: {max_persons}"
+        )
+    _ui_queue.put(_show)
 
 
 def show_attention_popup(summary):
-    root = tk.Tk()
-    root.withdraw()
-    log_lines = "\n".join([f"  {t}: {p}%" for t, p in summary["log"][-10:]]) or "  Nessun dato"
-    messagebox.showinfo(
-        "Riepilogo Attenzione",
-        f"Sessione attenzione terminata\n\n"
-        f"Media attenzione: {summary['avg_attention']:.1f}%\n"
-        f"Campioni rilevati: {summary['checks']}\n\n"
-        f"Ultimi rilevamenti:\n{log_lines}"
-    )
-    root.destroy()
+    def _show():
+        log_lines = "\n".join([f"  {t}: {p}%" for t, p in summary["log"][-10:]]) or "  Nessun dato"
+        _show_nonblocking_popup(
+            "Riepilogo Attenzione",
+            f"Sessione attenzione terminata\n\n"
+            f"Media attenzione: {summary['avg_attention']:.1f}%\n"
+            f"Campioni rilevati: {summary['checks']}\n\n"
+            f"Ultimi rilevamenti:\n{log_lines}"
+        )
+    _ui_queue.put(_show)
 
 
 def sync_panel_from_runtime():
@@ -173,12 +192,8 @@ def summary_thread_fn():
             stats["max_with_phone"] = 0
             stats["max_persons"] = 0
 
-        if mode == "phone" and panel.is_summary_enabled():
-            threading.Thread(
-                target=show_summary_popup,
-                args=(unique_users, max_p, SUMMARY_INTERVAL),
-                daemon=True
-            ).start()
+        if mode == "phone" and panel is not None and panel.is_summary_enabled():
+            show_summary_popup(unique_users, max_p, SUMMARY_INTERVAL)
 
 
 receiver.start()
@@ -198,6 +213,9 @@ print("[Main] In attesa del primo frame... | Q = esci | SPAZIO = cambia modalit�
 
 try:
     while running:
+        while not _ui_queue.empty():
+            fn = _ui_queue.get_nowait()
+            fn()
         panel.update()
 
         frame = receiver.get_frame()
