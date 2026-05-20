@@ -1,21 +1,15 @@
 import time
 import threading
-import tkinter as tk
 import cv2
 import queue
 
+from config import RTSP_URL, WINDOW_NAME
 from rtsp.rtsp_receiver import RTSPReceiver
 from phone_detection.processor import Processor
 from phone_detection.display import Display
 from attention_detection.attention_processor import AttentionProcessor
 from utils.control_panel import ControlPanel
 from attention_detection.attention_summary_popup import show_attention_summary_popup
-
-
-RTSP_URL = "rtsp://prova1234:prova1234@192.168.1.33:554/stream2"
-#RTSP_URL = "rtsp://localhost:8554/video"
-WINDOW_NAME = "IoT Camera - Phone Detection"
-
 
 receiver = RTSPReceiver(RTSP_URL)
 processor = Processor()
@@ -24,7 +18,6 @@ mode = "phone"
 display = Display(WINDOW_NAME, processor=processor)
 panel = None
 running = True
-
 
 _ui_queue = queue.SimpleQueue()
 
@@ -47,8 +40,7 @@ def sync_panel_from_runtime():
     panel.update_attention_section_visibility(mode)
 
 
-def apply_phone_conf(conf_pct):
-    """Applica la soglia confidence sia al phone detector sia all'attention processor."""
+def apply_conf(conf_pct):
     val = max(1, min(conf_pct, 95))
     display.set_conf_value(val)
     if attention is not None:
@@ -64,18 +56,15 @@ def switch_to_attention():
     global attention, mode
     if mode == "attention":
         return
-
     print("[Main] Passaggio a modalità ATTENZIONE...")
     processor.stop()
     time.sleep(0.2)
-
     attention = AttentionProcessor()
     conf_val = panel.get_phone_conf() / 100.0 if panel is not None else 0.45
     attention.set_conf_threshold(conf_val)
     attention.start(receiver.get_frame)
     attention.reset_session()
     attention.set_mode(panel.get_attention_mode() if panel else AttentionProcessor.MODE_DOWN_DISTRACTED)
-
     mode = "attention"
     sync_panel_from_runtime()
     panel.set_status("Modalità attuale: ATTENZIONE")
@@ -86,24 +75,19 @@ def switch_to_phone():
     global processor, attention, mode
     if mode == "phone":
         return
-
     print("[Main] Passaggio a modalità PHONE DETECTION...")
     summary = attention.get_session_summary() if attention is not None else {
         "avg_attention": 0.0, "checks": 0, "log": []
     }
-
     if attention is not None:
         attention.stop()
         time.sleep(0.2)
         attention = None
-
     processor = Processor()
     display.processor = processor
-    apply_phone_conf(panel.get_phone_conf())
+    apply_conf(panel.get_phone_conf())
     processor.start(receiver.get_frame)
-
     threading.Thread(target=show_attention_popup, args=(summary,), daemon=True).start()
-
     mode = "phone"
     sync_panel_from_runtime()
     panel.set_status("Modalità attuale: PHONE DETECTION")
@@ -148,7 +132,7 @@ panel = ControlPanel(
     display=display,
     attention_processor_cls=AttentionProcessor,
     on_mode_change=on_mode_change,
-    on_phone_conf_change=apply_phone_conf,
+    on_phone_conf_change=apply_conf,
     on_attention_mode_change=apply_attention_mode,
 )
 sync_panel_from_runtime()
@@ -188,7 +172,6 @@ try:
             toggle_attention_submode()
         elif key == ord('p') or key == ord('P'):
             open_panel()
-
 finally:
     running = False
     receiver.stop()

@@ -9,22 +9,27 @@ import urllib.request
 import os
 from ultralytics import YOLO
 
+from config import (
+    YOLO_MODEL_PATH, YOLO_MODEL_URL,
+    FACE_LANDMARKER_PATH, FACE_LANDMARKER_URL,
+    YOLO_CONF_THRESHOLD,
+    DOWN_THRESHOLD, UP_THRESHOLD,
+    MIN_PROCESS_INTERVAL,
+)
 
-YOLO_MODEL_PATH = "yolov8n-pose.pt"
-YOLO_MODEL_URL  = "https://github.com/ultralytics/assets/releases/download/v8.4.0/yolov8n-pose.pt"
 
 class AttentionProcessor:
-    DOWN_THRESHOLD = -18.0
-    UP_THRESHOLD = 12.0
-    FACE_CROP_SIZE = 224
+    DOWN_THRESHOLD    = DOWN_THRESHOLD
+    UP_THRESHOLD      = UP_THRESHOLD
+    FACE_CROP_SIZE    = 224
     FACE_MARGIN_RATIO = 0.35
 
-    KP_NOSE = 0
-    KP_LEFT_EYE = 1
+    KP_NOSE      = 0
+    KP_LEFT_EYE  = 1
     KP_RIGHT_EYE = 2
 
     MODE_DOWN_DISTRACTED = "down_distracted"
-    MODE_UP_DISTRACTED = "up_distracted"
+    MODE_UP_DISTRACTED   = "up_distracted"
 
     def __init__(self):
         if not os.path.exists(YOLO_MODEL_PATH):
@@ -34,51 +39,46 @@ class AttentionProcessor:
         else:
             print(f"[AttentionProcessor] Modello YOLO già presente: {YOLO_MODEL_PATH}")
 
-        self._yolo = YOLO("yolov8n-pose.pt")
-        # Soglia confidence YOLO (condivisa col pannello)
-        self._yolo_conf = 0.45
+        self._yolo      = YOLO(YOLO_MODEL_PATH)
+        self._yolo_conf = YOLO_CONF_THRESHOLD
 
-        self.model_path = "face_landmarker.task"
+        self.model_path = FACE_LANDMARKER_PATH
         if not os.path.exists(self.model_path):
             print("[AttentionProcessor] Download modello face_landmarker...")
-            urllib.request.urlretrieve(
-                "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-                self.model_path
-            )
+            urllib.request.urlretrieve(FACE_LANDMARKER_URL, self.model_path)
 
         self._face_3d = np.array([
-            [0.0, 0.0, 0.0],
-            [0.0, -330.0, -65.0],
+            [0.0,    0.0,    0.0],
+            [0.0,  -330.0,  -65.0],
             [-225.0, 170.0, -135.0],
-            [225.0, 170.0, -135.0],
-            [-150.0, -150.0, -125.0],
+            [225.0,  170.0, -135.0],
+            [-150.0,-150.0, -125.0],
             [150.0, -150.0, -125.0],
         ], dtype=np.float64)
 
-        self._landmark_ids = [1, 152, 263, 33, 287, 57]
-        self._last_result = None
-        self._lock = threading.Lock()
-        self._running = True
-        self._get_frame_fn = None
-        self._session_checks = 0
-        self._session_attentive = 0
-        self.session_log = []
-        self._mode = self.MODE_DOWN_DISTRACTED
-        self._last_process_time = 0.0
-        self._min_process_interval = 0.12
-        self._last_annotated = None
-        self._frame_count = 0
+        self._landmark_ids       = [1, 152, 263, 33, 287, 57]
+        self._last_result        = None
+        self._lock               = threading.Lock()
+        self._running            = True
+        self._get_frame_fn       = None
+        self._session_checks     = 0
+        self._session_attentive  = 0
+        self.session_log         = []
+        self._mode               = self.MODE_DOWN_DISTRACTED
+        self._last_process_time  = 0.0
+        self._min_process_interval = MIN_PROCESS_INTERVAL
+        self._last_annotated     = None
+        self._frame_count        = 0
         print("[AttentionProcessor] Pronto (YOLO + Face Landmarker).")
 
-    # ── Conf threshold (dal pannello) ────────────────────────────────────────
+    # ── Conf threshold ────────────────────────────────────────────────────────
     def set_conf_threshold(self, value: float):
-        """Imposta la soglia confidence per YOLO (0.01 – 0.95)."""
         self._yolo_conf = max(0.01, min(value, 0.95))
 
     def get_conf_threshold(self) -> float:
         return self._yolo_conf
 
-    # ── Mode ─────────────────────────────────────────────────────────────────
+    # ── Mode ──────────────────────────────────────────────────────────────────
     def get_mode(self):
         return self._mode
 
@@ -86,9 +86,9 @@ class AttentionProcessor:
         if mode in (self.MODE_DOWN_DISTRACTED, self.MODE_UP_DISTRACTED):
             self._mode = mode
             if self._mode == self.MODE_DOWN_DISTRACTED:
-                print("[AttentionProcessor] Modalita': LEZIONE (giu' = distratto)")
+                print("[AttentionProcessor] Modalità: LEZIONE (giù = distratto)")
             else:
-                print("[AttentionProcessor] Modalita': ESERCITAZIONE (su = distratto)")
+                print("[AttentionProcessor] Modalità: ESERCITAZIONE (su = distratto)")
 
     def toggle_mode(self):
         if self._mode == self.MODE_DOWN_DISTRACTED:
@@ -107,7 +107,7 @@ class AttentionProcessor:
             min_face_presence_confidence=0.3,
             min_tracking_confidence=0.3,
             output_face_blendshapes=False,
-            output_facial_transformation_matrixes=False
+            output_facial_transformation_matrixes=False,
         )
         return mp_vision.FaceLandmarker.create_from_options(options)
 
@@ -125,9 +125,9 @@ class AttentionProcessor:
         self._running = False
 
     def reset_session(self):
-        self._session_checks = 0
+        self._session_checks    = 0
         self._session_attentive = 0
-        self.session_log = []
+        self.session_log        = []
         print("[AttentionProcessor] Sessione azzerata.")
 
     def get_session_summary(self):
@@ -137,7 +137,7 @@ class AttentionProcessor:
         return {
             "avg_attention": round(avg, 1),
             "checks": self._session_checks,
-            "log": self.session_log.copy()
+            "log": self.session_log.copy(),
         }
 
     def handle_click(self, x, y):
@@ -146,25 +146,20 @@ class AttentionProcessor:
     # ── Internal loop ─────────────────────────────────────────────────────────
     def _loop(self):
         landmarker = self._create_landmarker()
-
         while self._running:
             frame = self._get_frame_fn()
             if frame is None:
                 time.sleep(0.01)
                 continue
-
             now = time.time()
             self._frame_count += 1
-
             if (now - self._last_process_time) < self._min_process_interval:
                 if self._last_annotated is not None:
                     with self._lock:
                         self._last_result = self._last_annotated.copy()
                 time.sleep(0.01)
                 continue
-
             self._last_process_time = now
-
             try:
                 annotated = self._run(frame, self._frame_count, landmarker)
                 self._last_annotated = annotated.copy()
@@ -177,7 +172,6 @@ class AttentionProcessor:
                 self._last_annotated = fallback
                 with self._lock:
                     self._last_result = fallback
-
         landmarker.close()
 
     def _run(self, frame, frame_count, landmarker):
@@ -191,41 +185,36 @@ class AttentionProcessor:
             conf=self._yolo_conf,
             iou=0.5,
             imgsz=320,
-            verbose=False
+            verbose=False,
         )
-
         if not yolo_results or yolo_results[0].boxes is None:
             self._draw_hud(annotated, 0, 0, 0, img_w, img_h, frame_count)
             return annotated
 
-        result = yolo_results[0]
-        boxes = result.boxes
+        result    = yolo_results[0]
+        boxes     = result.boxes
         keypoints = result.keypoints
 
         if keypoints is None or keypoints.data is None:
             self._draw_hud(annotated, 0, 0, 0, img_w, img_h, frame_count)
             return annotated
 
-        kp_data = keypoints.data.cpu().numpy()
+        kp_data   = keypoints.data.cpu().numpy()
         track_ids = boxes.id.int().cpu().tolist() if boxes.id is not None else list(range(len(boxes)))
 
-        num_faces = 0
+        num_faces     = 0
         num_attentive = 0
 
         for idx, (track_id, kps) in enumerate(zip(track_ids, kp_data)):
             x1p, y1p, x2p, y2p = map(int, boxes.xyxy[idx].cpu().tolist())
             face_crop, roi_x, roi_y, roi_w, roi_h = self._get_face_crop(
-                frame, kps, x1p, y1p, x2p, y2p, img_w, img_h
-            )
-
+                frame, kps, x1p, y1p, x2p, y2p, img_w, img_h)
             if face_crop is None:
                 continue
-
             num_faces += 1
-            rgb = np.ascontiguousarray(cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB))
-            mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+            rgb      = np.ascontiguousarray(cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB))
+            mp_img   = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
             lm_result = landmarker.detect(mp_img)
-
             if not lm_result.face_landmarks:
                 cv2.rectangle(annotated, (x1p, y1p), (x2p, y2p), (128, 128, 128), 1)
                 cv2.rectangle(annotated, (roi_x, roi_y), (roi_x + roi_w, roi_y + roi_h), (128, 128, 128), 1)
@@ -233,25 +222,17 @@ class AttentionProcessor:
                             (x1p, max(0, y1p - 8)),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.40, (128, 128, 128), 1)
                 continue
-
-            pitch = self._estimate_pitch(
-                lm_result.face_landmarks[0],
-                self.FACE_CROP_SIZE,
-                self.FACE_CROP_SIZE
-            )
-
+            pitch = self._estimate_pitch(lm_result.face_landmarks[0], self.FACE_CROP_SIZE, self.FACE_CROP_SIZE)
             if pitch is None:
                 continue
-
             distracted = self._is_distracted(pitch)
             if distracted:
-                color = (0, 0, 255)
+                color  = (0, 0, 255)
                 status = f"#{track_id} DISTRATTO ({pitch:.1f})"
             else:
                 num_attentive += 1
-                color = (0, 255, 0)
+                color  = (0, 255, 0)
                 status = f"#{track_id} ATTENTO ({pitch:.1f})"
-
             cv2.rectangle(annotated, (x1p, y1p), (x2p, y2p), color, 2)
             cv2.rectangle(annotated, (roi_x, roi_y), (roi_x + roi_w, roi_y + roi_h), color, 1)
             cv2.putText(annotated, status, (x1p, max(0, y1p - 8)),
@@ -259,7 +240,7 @@ class AttentionProcessor:
 
         if num_faces > 0:
             pct = num_attentive / num_faces * 100
-            self._session_checks += 1
+            self._session_checks    += 1
             self._session_attentive += pct
             self.session_log.append((time.strftime("%H:%M:%S"), round(pct, 1)))
         else:
@@ -279,37 +260,32 @@ class AttentionProcessor:
         return "ESERCITAZIONE: distratto se guarda in alto"
 
     def _get_face_crop(self, frame, kps, x1p, y1p, x2p, y2p, img_w, img_h):
-        nose_conf = float(kps[self.KP_NOSE, 2])
-        leye_conf = float(kps[self.KP_LEFT_EYE, 2])
-        reye_conf = float(kps[self.KP_RIGHT_EYE, 2])
-
+        nose_conf  = float(kps[self.KP_NOSE, 2])
+        leye_conf  = float(kps[self.KP_LEFT_EYE, 2])
+        reye_conf  = float(kps[self.KP_RIGHT_EYE, 2])
         if nose_conf > 0.25:
-            cx = int(kps[self.KP_NOSE, 0])
-            cy = int(kps[self.KP_NOSE, 1])
+            cx   = int(kps[self.KP_NOSE, 0])
+            cy   = int(kps[self.KP_NOSE, 1])
             base = max(40, int((y2p - y1p) * self.FACE_MARGIN_RATIO))
         elif leye_conf > 0.25 and reye_conf > 0.25:
-            cx = int((kps[self.KP_LEFT_EYE, 0] + kps[self.KP_RIGHT_EYE, 0]) / 2)
-            cy = int((kps[self.KP_LEFT_EYE, 1] + kps[self.KP_RIGHT_EYE, 1]) / 2)
+            cx   = int((kps[self.KP_LEFT_EYE, 0] + kps[self.KP_RIGHT_EYE, 0]) / 2)
+            cy   = int((kps[self.KP_LEFT_EYE, 1] + kps[self.KP_RIGHT_EYE, 1]) / 2)
             base = max(40, int((y2p - y1p) * self.FACE_MARGIN_RATIO))
         else:
-            cx = (x1p + x2p) // 2
-            cy = y1p + int((y2p - y1p) * 0.18)
+            cx   = (x1p + x2p) // 2
+            cy   = y1p + int((y2p - y1p) * 0.18)
             base = max(40, int((y2p - y1p) * 0.22))
-
-        rx1 = max(0, cx - base)
-        ry1 = max(0, cy - base)
-        rx2 = min(img_w, cx + base)
-        ry2 = min(img_h, cy + base)
+        rx1   = max(0, cx - base)
+        ry1   = max(0, cy - base)
+        rx2   = min(img_w, cx + base)
+        ry2   = min(img_h, cy + base)
         roi_w = rx2 - rx1
         roi_h = ry2 - ry1
-
         if roi_w < 30 or roi_h < 30:
             return None, rx1, ry1, roi_w, roi_h
-
         crop = frame[ry1:ry2, rx1:rx2]
         if crop.size == 0:
             return None, rx1, ry1, roi_w, roi_h
-
         crop = cv2.resize(crop, (self.FACE_CROP_SIZE, self.FACE_CROP_SIZE))
         return crop, rx1, ry1, roi_w, roi_h
 
@@ -318,22 +294,18 @@ class AttentionProcessor:
             [landmarks[i].x * img_w, landmarks[i].y * img_h]
             for i in self._landmark_ids
         ], dtype=np.float64)
-
-        focal = img_w
+        focal      = img_w
         cam_matrix = np.array([
             [focal, 0, img_w / 2],
             [0, focal, img_h / 2],
-            [0, 0, 1]
+            [0, 0, 1],
         ], dtype=np.float64)
-
-        dist = np.zeros((4, 1), dtype=np.float64)
+        dist    = np.zeros((4, 1), dtype=np.float64)
         success, rot_vec, _ = cv2.solvePnP(
             self._face_3d, face_2d, cam_matrix, dist,
-            flags=cv2.SOLVEPNP_ITERATIVE
-        )
+            flags=cv2.SOLVEPNP_ITERATIVE)
         if not success:
             return None
-
         rot_mat, _ = cv2.Rodrigues(rot_vec)
         angles, *_ = cv2.RQDecomp3x3(rot_mat)
         return angles[0] * 360
@@ -342,18 +314,9 @@ class AttentionProcessor:
         overlay = annotated.copy()
         cv2.rectangle(overlay, (0, 0), (620, 110), (20, 20, 20), -1)
         cv2.addWeighted(overlay, 0.55, annotated, 0.45, 0, annotated)
-
-        cv2.putText(annotated, "MODALITA': ATTENZIONE", (10, 22),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.58, (0, 220, 255), 2)
-        cv2.putText(annotated, self._get_mode_label(), (10, 44),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.46, (255, 220, 120), 1)
-        cv2.putText(annotated, f"Attenti ora: {num_attentive}/{num_faces} ({pct:.0f}%)", (10, 68),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.48, (0, 255, 120), 1)
-
-        summary = self.get_session_summary()
-        cv2.putText(annotated,
-                    f"Media sessione: {summary['avg_attention']:.1f}% | campioni: {summary['checks']}",
-                    (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.40, (180, 180, 180), 1)
-        cv2.putText(annotated,
-                    f"Conf YOLO: {self._yolo_conf:.0%} | [M]=modo [SPAZIO]=phone/attenzione",
-                    (10, img_h - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (200, 200, 200), 1)
+        cv2.putText(annotated, f"Faces: {num_faces} | Attentive: {num_attentive} | Attention: {pct:.0f}%",
+                    (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.60, (255, 255, 255), 2)
+        cv2.putText(annotated, self._get_mode_label(),
+                    (10, 48), cv2.FONT_HERSHEY_SIMPLEX, 0.50, (180, 220, 255), 1)
+        cv2.putText(annotated, f"Frame: {frame_count}  |  Conf: {self._yolo_conf:.2f}",
+                    (10, 72), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (160, 160, 160), 1)

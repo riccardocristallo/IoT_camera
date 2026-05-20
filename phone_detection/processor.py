@@ -7,11 +7,13 @@ import os
 import mediapipe as mp
 from mediapipe.tasks.python import vision as mp_vision
 
-MODEL_URL = "https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite2/float32/1/efficientdet_lite2.tflite"
-MODEL_PATH = "efficientdet_lite2.tflite"
+from config import PHONE_MODEL_PATH, PHONE_MODEL_URL, PHONE_CONF_THRESHOLD
+
+MODEL_PATH = PHONE_MODEL_PATH
+MODEL_URL  = PHONE_MODEL_URL
 
 PERSON_LABEL = "person"
-PHONE_LABEL = "cell phone"
+PHONE_LABEL  = "cell phone"
 
 
 def _download_model_if_needed(path: str, url: str):
@@ -32,12 +34,12 @@ class Processor:
         self._timestamp = 0
         self._raw_detections = []
         self._raw_lock = threading.Lock()
-        self.score_threshold = 0.35
+        self.score_threshold = PHONE_CONF_THRESHOLD
 
-        BaseOptions = mp.tasks.BaseOptions
+        BaseOptions  = mp.tasks.BaseOptions
         ObjectDetector = mp_vision.ObjectDetector
-        ObjDetOptions = mp_vision.ObjectDetectorOptions
-        RunningMode = mp_vision.RunningMode
+        ObjDetOptions  = mp_vision.ObjectDetectorOptions
+        RunningMode    = mp_vision.RunningMode
 
         options = ObjDetOptions(
             base_options=BaseOptions(model_asset_path=model_path),
@@ -62,19 +64,14 @@ class Processor:
                 if frame is None:
                     time.sleep(0.005)
                     continue
-
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-
                 self._timestamp += 1
                 self._detector.detect_async(mp_image, self._timestamp)
-
                 with self._raw_lock:
                     detections = list(self._raw_detections)
-
                 threshold = self.score_threshold
                 annotated_frame, num_persons, num_with_phone = self._process(frame, detections, threshold)
-
                 with self._lock:
                     self._last_result = (annotated_frame, num_persons, num_with_phone)
 
@@ -115,7 +112,7 @@ class Processor:
     def _process(self, frame, detections, threshold: float):
         h, w = frame.shape[:2]
         persons = []
-        phones = []
+        phones  = []
 
         for det in detections:
             if not det.categories:
@@ -124,9 +121,8 @@ class Processor:
             if cat.score < threshold:
                 continue
             label = cat.category_name.lower()
-            conf = cat.score
-            box = self._det_to_xyxy(det, w, h)
-
+            conf  = cat.score
+            box   = self._det_to_xyxy(det, w, h)
             if label == PERSON_LABEL:
                 persons.append((*box, conf))
             elif label == PHONE_LABEL:
@@ -147,13 +143,12 @@ class Processor:
         num_with_phone = 0
         for (x1, y1, x2, y2, conf, has_phone) in persons_with_phone:
             if has_phone:
-                color = (0, 0, 255)
+                color     = (0, 0, 255)
                 label_txt = f"PHONE! {conf:.0%}"
                 num_with_phone += 1
             else:
-                color = (0, 255, 0)
+                color     = (0, 255, 0)
                 label_txt = f"Person {conf:.0%}"
-
             cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
             (tw, th), _ = cv2.getTextSize(label_txt, cv2.FONT_HERSHEY_SIMPLEX, 0.52, 1)
             cv2.rectangle(annotated, (x1, y1 - th - 8), (x1 + tw + 6, y1), color, -1)
