@@ -115,88 +115,114 @@ def show_attention_summary_popup(panel_root, summary: dict):
              text="  ≥70% Good    40–70% Fair    <40% Low",
              font=("Arial", 8), bg=DARK_BG, fg=TEXT_MUTED).pack(anchor="w")
 
-    # ── Trend chart ───────────────────────────────────────────────────────────
-    tk.Label(win, text="Attention threshold trend over time",
+        # ── Student bar chart ─────────────────────────────────────────────────────
+    students = summary.get("students", [])
+
+    tk.Label(win, text="Attention by student",
              font=("Arial", 10, "bold"), bg=DARK_BG, fg=TEXT).pack(
         anchor="w", padx=16, pady=(4, 0))
 
-    CANVAS_H = 180
-    chart_canvas = tk.Canvas(win, height=CANVAS_H, bg=CARD_BG,
-                              highlightbackground=BORDER, highlightthickness=1, bd=0)
+    CANVAS_H = 220
+    chart_canvas = tk.Canvas(
+        win,
+        height=CANVAS_H,
+        bg=CARD_BG,
+        highlightbackground=BORDER,
+        highlightthickness=1,
+        bd=0
+    )
     chart_canvas.pack(fill="x", padx=16, pady=(4, 4))
 
-    def draw_chart(canvas):
+    def draw_student_bars(canvas):
         canvas.delete("all")
         canvas.update_idletasks()
+
         W = canvas.winfo_width()
         H = canvas.winfo_height()
         if W < 10 or H < 10:
             W, H = 488, CANVAS_H
 
-        PAD_L, PAD_R, PAD_T, PAD_B = 44, 16, 14, 28
+        PAD_L, PAD_R, PAD_T, PAD_B = 44, 16, 18, 44
         plot_w = W - PAD_L - PAD_R
         plot_h = H - PAD_T - PAD_B
 
-        # Horizontal grid
+        # Griglia orizzontale
         for pct in (0, 25, 50, 70, 100):
             y = PAD_T + plot_h - int(pct / 100 * plot_h)
-            canvas.create_line(PAD_L, y, W - PAD_R, y,
-                               fill="#2d2c2a", width=1, dash=(4, 4))
-            canvas.create_text(PAD_L - 4, y, text=f"{pct}%",
-                               anchor="e", font=("Arial", 7), fill=TEXT_MUTED)
+            canvas.create_line(
+                PAD_L, y, W - PAD_R, y,
+                fill="#2d2c2a", width=1, dash=(4, 4)
+            )
+            canvas.create_text(
+                PAD_L - 6, y, text=f"{pct}%",
+                anchor="e", font=("Arial", 7), fill=TEXT_MUTED
+            )
 
-        # Colored dashed threshold lines
+        # Soglie
         for thresh, color in ((70, GREEN), (40, ORANGE)):
             y = PAD_T + plot_h - int(thresh / 100 * plot_h)
-            canvas.create_line(PAD_L, y, W - PAD_R, y,
-                               fill=color, width=1, dash=(6, 3))
+            canvas.create_line(
+                PAD_L, y, W - PAD_R, y,
+                fill=color, width=1, dash=(6, 3)
+            )
 
-        if not log:
-            canvas.create_text(W // 2, H // 2,
-                               text="No data available",
-                               fill=TEXT_MUTED, font=("Arial", 10))
+        if not students:
+            canvas.create_text(
+                W // 2, H // 2,
+                text="No student data available",
+                fill=TEXT_MUTED, font=("Arial", 10)
+            )
         else:
-            n = len(log)
-            xs = [PAD_L + int(i / max(n - 1, 1) * plot_w) for i in range(n)]
-            ys = [PAD_T + plot_h - int(p / 100 * plot_h) for _, p in log]
+            n = len(students)
+            gap = 14
+            bar_w = max(24, min(64, int((plot_w - gap * (n + 1)) / max(n, 1))))
 
-            # Filled area
-            if n >= 2:
-                for i in range(n - 1):
-                    base = PAD_T + plot_h
-                    canvas.create_polygon(
-                        xs[i], ys[i], xs[i+1], ys[i+1],
-                        xs[i+1], base, xs[i], base,
-                        fill="#2d3f42", outline=""
-                    )
+            total_bars_w = n * bar_w + (n + 1) * gap
+            start_x = PAD_L + max(0, (plot_w - total_bars_w) // 2)
 
-            coords = []
-            for x, y in zip(xs, ys):
-                coords.extend([x, y])
-            canvas.create_line(*coords, fill=TEAL, width=2, smooth=True)
+            for i, student in enumerate(students):
+                name = student.get("name", f"Student {i+1}")
+                att = max(0, min(100, float(student.get("attention", 0))))
 
-            # Threshold-colored dots
-            for i, (x, y) in enumerate(zip(xs, ys)):
-                r = 3
-                canvas.create_oval(x - r, y - r, x + r, y + r,
-                                   fill=attention_color(log[i][1]),
-                                   outline=CARD_BG, width=1)
+                x0 = start_x + gap + i * (bar_w + gap)
+                x1 = x0 + bar_w
+                y1 = PAD_T + plot_h
+                y0 = y1 - int(att / 100 * plot_h)
 
-            # X-axis labels (max 6)
-            step = max(1, n // 6)
-            for i in range(0, n, step):
-                canvas.create_text(xs[i], H - PAD_B + 10,
-                                   text=log[i][0], anchor="n",
-                                   font=("Arial", 7), fill=TEXT_MUTED)
+                color = attention_color(att)
 
-        # Axes
+                # Barra
+                canvas.create_rectangle(
+                    x0, y0, x1, y1,
+                    fill=color, outline=""
+                )
+
+                # Valore sopra la barra
+                canvas.create_text(
+                    (x0 + x1) // 2, y0 - 10,
+                    text=f"{att:.0f}%",
+                    font=("Arial", 8, "bold"),
+                    fill=WHITE if att > 15 else TEXT
+                )
+
+                # Nome sotto
+                short_name = name if len(name) <= 10 else name[:9] + "…"
+                canvas.create_text(
+                    (x0 + x1) // 2, y1 + 12,
+                    text=short_name,
+                    anchor="n",
+                    font=("Arial", 7),
+                    fill=TEXT_MUTED
+                )
+
+        # Assi
         canvas.create_line(PAD_L, PAD_T, PAD_L, PAD_T + plot_h,
                            fill=BORDER, width=1)
         canvas.create_line(PAD_L, PAD_T + plot_h, W - PAD_R, PAD_T + plot_h,
                            fill=BORDER, width=1)
 
-    chart_canvas.bind("<Configure>", lambda e: draw_chart(chart_canvas))
-    win.after(80, lambda: draw_chart(chart_canvas))
+    chart_canvas.bind("<Configure>", lambda e: draw_student_bars(chart_canvas))
+    win.after(80, lambda: draw_student_bars(chart_canvas))
 
     # ── Legend ────────────────────────────────────────────────────────────────
     legend = tk.Frame(win, bg=DARK_BG)

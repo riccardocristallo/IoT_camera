@@ -73,6 +73,8 @@ class AttentionProcessor:
         self._min_process_interval = MIN_PROCESS_INTERVAL
         self._last_annotated     = None
         self._frame_count        = 0
+        self.student_stats = {}
+        self.track_id_to_name = {}
         print("[AttentionProcessor] Ready (YOLO + Face Landmarker).")
 
 
@@ -132,19 +134,46 @@ class AttentionProcessor:
         self._running = False
 
     def reset_session(self):
-        self._session_checks    = 0
+        self._session_checks = 0
         self._session_attentive = 0
-        self.session_log        = []
+        self.session_log = []
+        self.student_stats = {}
+        self.track_id_to_name = {}
         print("[AttentionProcessor] Session reset.")
 
     def get_session_summary(self):
+        students = []
+
+        for name, stats in self.student_stats.items():
+            checks = stats.get("checks", 0)
+            att_sum = stats.get("att_sum", 0.0)
+
+            attention = 0.0
+            if checks > 0:
+                attention = att_sum / checks
+
+            students.append({
+                "name": name,
+                "attention": round(attention, 1)
+            })
+
+        students.sort(key=lambda s: s["attention"], reverse=True)
+
         if self._session_checks == 0:
-            return {"avg_attention": 0.0, "checks": 0, "log": []}
+            return {
+                "avg_attention": 0.0,
+                "checks": 0,
+                "log": [],
+                "students": students,
+            }
+
         avg = self._session_attentive / self._session_checks
+
         return {
             "avg_attention": round(avg, 1),
             "checks": self._session_checks,
             "log": self.session_log.copy(),
+            "students": students,
         }
 
     def handle_click(self, x, y):
@@ -236,6 +265,14 @@ class AttentionProcessor:
             if pitch is None:
                 continue
             distracted = self._is_distracted(pitch)
+            student_name = self.track_id_to_name.setdefault(track_id, f"Alunno {len(self.track_id_to_name) + 1}")
+
+            if student_name not in self.student_stats:
+                self.student_stats[student_name] = {"att_sum": 0.0, "checks": 0}
+
+            att_value = 0.0 if distracted else 100.0
+            self.student_stats[student_name]["att_sum"] += att_value
+            self.student_stats[student_name]["checks"] += 1
             if distracted:
                 color  = (0, 0, 255)
                 status = f"#{track_id} DISTRACTED ({pitch:.1f})"
